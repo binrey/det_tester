@@ -1,0 +1,23 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "TestDets-YOLOv7-data11",
+            "type": "python",
+            "request": "launch",
+            "program": "test_detection.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--data", "configs/nlmk_data11.yaml", 
+                "--batch-size", "16",
+                "--detections", "labels-yolov7",
+                "--task", "test",
+                "--config", "configs/app_config.yaml"],
+            "cwd": "${workspaceFolder}"
+        },
+    ]
+}
