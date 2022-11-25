@@ -10,25 +10,27 @@ from clearml import Task
 import numpy as np
 import torch
 import yaml
+import shutil
 from tqdm import tqdm
 from tidecv import TIDE, datasets, Data
+import matplotlib.pyplot as plt
 
 import utils.clearml_task
 from utils.clearml_task import initialize_clearml_task
 from utils.common import get_data_from_yaml
 
-
-FILE = Path(__file__).resolve()
-ROOT = FILE.parents[0]  # YOLOv5 root directory
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))  # add ROOT to PATH
-sys.path.append(str(os.path.join(ROOT, 'yolov7')))
-ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
+# FILE = Path(__file__).resolve()
+# ROOT = FILE.parents[0]  # YOLOv5 root directory
+# if str(ROOT) not in sys.path:
+#     sys.path.append(str(ROOT))  # add ROOT to PATH
+# sys.path.append(str(os.path.join(ROOT, 'yolov7')))
+# ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 from utils.datasets import create_dataloader
 from utils.general import check_file, box_iou, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, increment_path, colorstr
 from utils.metrics import ap_per_class, ConfusionMatrix
 from utils.plots import plot_images, output_to_target, plot_study_txt
+
 
 def clearml_init_task(opt):
     config = get_data_from_yaml(opt.config)
@@ -47,18 +49,15 @@ def test(data,
          verbose=False,
          save_dir=Path(''),  # for saving images
          plots=True):
-
-
-
     tide = TIDE()
-    
+
     gt_data = Data('ground truth')
     det_data = Data('detections')
 
     # Set device
 
     set_logging()
-    device = "cpu" #select_device(opt.device, batch_size=batch_size)
+    device = "cpu"  # select_device(opt.device, batch_size=batch_size)
 
     # Directories
     save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))  # increment run
@@ -66,34 +65,34 @@ def test(data,
 
     with open(data) as f:
         data = yaml.load(f, Loader=yaml.SafeLoader)
-    #check_dataset(data)  # check
+    # check_dataset(data)  # check
     nc = 1 if single_cls else int(data['nc'])  # number of classes
     iouv = torch.linspace(0.5, 0.95, 10).to(device)  # iou vector for mAP@0.5:0.95
     niou = iouv.numel()
 
     # Dataloader
     task = opt.task if opt.task in ('val', 'test') else 'val'  # path to train/val/test images
-    dataloader_det = create_dataloader(data[task], imgsz, batch_size, 32, opt=opt, pad=0.5, rect=True, labels_dir=detections,
-                                       prefix=colorstr(f'{task}: '))[0]
-    dataloader_grt = create_dataloader(data[task], imgsz, batch_size, 32, opt=opt, pad=0.5, rect=True, labels_dir="labels",
-                                       prefix=colorstr(f'{task}: '))[0]
+    dataloader_det = \
+    create_dataloader(data[task], imgsz, batch_size, 32, opt=opt, pad=0.5, rect=True, labels_dir=detections,
+                      prefix=colorstr(f'{task}: '))[0]
+    dataloader_grt = \
+    create_dataloader(data[task], imgsz, batch_size, 32, opt=opt, pad=0.5, rect=True, labels_dir="labels",
+                      prefix=colorstr(f'{task}: '))[0]
     seen = 0
     confusion_matrix = ConfusionMatrix(nc=nc)
     names = {k: v for k, v in enumerate(data["names"])}
     s = ('%20s' + '%12s' * 6) % ('Class', 'Images', 'Labels', 'P', 'R', 'mAP@.5', 'mAP@.5:.95')
     p, r, f1, mp, mr, map50, map, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
     jdict, stats, ap, ap_class = [], [], [], []
-    #pbar = tqdm(zip(dataloader_grt, dataloader_det), desc=s, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}')
+    # pbar = tqdm(zip(dataloader_grt, dataloader_det), desc=s, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}')
     nimg = 0
     for batch_i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader_grt, desc=s)):
-        if batch_i > 9:
-            break
-        _, netouts, _, _ = next(dataloader_det.iterator)
+        _, netouts, pp, _ = next(dataloader_det.iterator)
 
         for det in targets.numpy():
-            gt_data.add_ground_truth(nimg+det[0], det[2], det[3:])
+            gt_data.add_ground_truth(nimg + det[0], det[2], det[3:])
         for det in netouts.numpy():
-            det_data.add_detection(nimg+det[0], det[2], det[1], det[3:])
+            det_data.add_detection(nimg + det[0], det[2], det[1], det[3:])
         nimg += img.shape[0]
 
         nb, _, height, width = img.shape  # batch size, channels, height, width
@@ -109,8 +108,8 @@ def test(data,
         netouts = torch.hstack([netouts[:, :1], netouts[:, 3:], netouts[:, 1:3]])
         netouts[:, 1:5] *= torch.Tensor([width, height, width, height]).to(device)
         netouts[:, 1:5] = xywh2xyxy(netouts[:, 1:5])
-        netouts = [netouts[netouts[:, 0] == i, 1:] for i in range(img.shape[0])] 
-              
+        netouts = [netouts[netouts[:, 0] == i, 1:] for i in range(img.shape[0])]
+
         # Statistics per image
         for si, pred in enumerate(netouts):
             labels = targets[targets[:, 0] == si, 1:]
@@ -165,7 +164,7 @@ def test(data,
             stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls))
 
         # Plot images
-        if plots and batch_i < 3:
+        if plots and batch_i < 5:
             f = save_dir / f'test_batch{batch_i}_labels.jpg'  # labels
             Thread(target=plot_images, args=(img, targets, paths, f, names), daemon=True).start()
             f = save_dir / f'test_batch{batch_i}_pred.jpg'  # predictions
@@ -186,22 +185,31 @@ def test(data,
     metrics_table = pd.DataFrame([], columns=columns)
     pf = '%20s' + '%12i' * 2 + '%12.3g' * 4  # print format
     print(pf % ('all', seen, nt.sum(), mp, mr, map50, map))
-    #metrics_table.append({'Class': 'all', 'Images': seen, 'Labels': nt.sum(), 'P': mp, 'R': mr, 'mAP@.5': map50, 'mAP@.5:.95': map}, ignore_index=True, inplace=True)
-    metrics_table = pd.concat([metrics_table, pd.DataFrame([['all', seen, nt.sum(), mp, mr, map50, map]], columns=columns)], ignore_index=True)
+    metrics_table = pd.concat(
+        [metrics_table, pd.DataFrame([['all', seen, nt.sum(), mp, mr, map50, map]], columns=columns)],
+        ignore_index=True)
 
     # Print results per class
     if (verbose or nc < 50) and nc > 1 and len(stats):
         for i, c in enumerate(ap_class):
             print(pf % (names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]))
-            metrics_table = pd.concat([metrics_table, pd.DataFrame([[names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]]], columns=columns)], ignore_index=True)
-    utils.clearml_task.clearml_logger.report_table("Result metrics", "AP", 0, metrics_table)
+            metrics_table = pd.concat(
+                [metrics_table, pd.DataFrame([[names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]]], columns=columns)],
+                ignore_index=True)
+    utils.clearml_task.clearml_logger.report_table("General metrics", "mAPs table", 0, metrics_table)
 
     # TIDE metrics
     f = save_dir / f'tide_metrics'
     tide.evaluate(gt_data, det_data, mode=TIDE.BOX)
     tide.summarize()
     tide.plot(f)
-    utils.clearml_task.clearml_logger.report_image("manual title", "TIDE", 0, f/"detections_bbox_summary.png")
+    shutil.move(f / "detections_bbox_summary.png", f.parent / "TIDE.png")
+    shutil.rmtree(f)
+    f = f.parent / "TIDE.png"
+    fig = plt.figure(figsize=(12, 12), tight_layout=True)
+    plt.imshow(np.array(Image.open(f)))
+    plt.axis('off')
+    utils.clearml_task.clearml_logger.report_matplotlib_figure("General metrics", "TIDE", fig, report_interactive=False)
 
     # Plots
     if plots:
@@ -218,7 +226,8 @@ def test(data,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
     parser.add_argument('--data', type=str, default='data/coco.yaml', help='*.data path')
-    parser.add_argument('--detections', type=str, help='dir to labels from detector. haveto be placed near labels folder, example - labels-from-model')
+    parser.add_argument('--detections', type=str,
+                        help='dir to labels from detector. haveto be placed near labels folder, example - labels-from-model')
     parser.add_argument('--batch-size', type=int, default=32, help='size of each image batch')
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.001, help='object confidence threshold')
@@ -241,10 +250,9 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     opt.data = check_file(opt.data)  # check file
     print(opt)
-    #check_requirements()
+    # check_requirements()
 
     clearml_init_task(opt)
-
 
     if opt.task in ('train', 'val', 'test'):  # run normally
         test(data=opt.data,

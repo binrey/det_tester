@@ -14,7 +14,7 @@
             "args": [
                 "--data", "configs/nlmk_data11.yaml", 
                 "--batch-size", "16",
-                "--detections", "labels-yolov7",
+                "--detections", "labels-yolov5",
                 "--task", "test",
                 "--config", "configs/app_config.yaml"],
             "cwd": "${workspaceFolder}"

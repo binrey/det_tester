@@ -5,7 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-
+import utils.clearml_task
 from . import general
 
 
@@ -172,6 +172,7 @@ class ConfusionMatrix:
                        yticklabels=names + ['background FN'] if labels else "auto").set_facecolor((1, 1, 1))
             fig.axes[0].set_xlabel('True')
             fig.axes[0].set_ylabel('Predicted')
+            utils.clearml_task.clearml_logger.report_matplotlib_figure("General metrics", "Confusion matrix", fig, report_interactive=False)
             plt.title('Confusion matrix')
             fig.savefig(Path(save_dir) / 'confusion_matrix.png', dpi=250)
         except Exception as e:
@@ -201,9 +202,9 @@ def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=()):
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    utils.clearml_task.clearml_logger.report_matplotlib_figure("General metrics", "Precision-recall curve", fig, report_interactive=False)
     ax.set_title('Precision-recall curve')
     fig.savefig(Path(save_dir), dpi=250)
-
 
 
 def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence', ylabel='Metric'):
@@ -223,5 +224,6 @@ def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence'
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    utils.clearml_task.clearml_logger.report_matplotlib_figure("General metrics", f"{ylabel}-confidence curve", fig, report_interactive=False)
     ax.set_title(f'{ylabel}-confidence curve')
     fig.savefig(Path(save_dir), dpi=250)

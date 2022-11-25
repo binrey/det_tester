@@ -6,7 +6,7 @@ import os
 import random
 from copy import copy
 from pathlib import Path
-
+import utils.clearml_task
 import cv2
 import matplotlib
 import matplotlib.pyplot as plt
@@ -111,7 +111,7 @@ def output_to_target(output):
     return np.array(targets)
 
 
-def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max_size=640, max_subplots=16):
+def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max_size=1024, max_subplots=16):
     # Plot image grid with labels
 
     if isinstance(images, torch.Tensor):
@@ -186,7 +186,15 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
         r = min(1280. / max(h, w) / ns, 1.0)  # ratio to limit image size
         mosaic = cv2.resize(mosaic, (int(ns * w * r), int(ns * h * r)), interpolation=cv2.INTER_AREA)
         # cv2.imwrite(fname, cv2.cvtColor(mosaic, cv2.COLOR_BGR2RGB))  # cv2 save
-        Image.fromarray(mosaic).save(fname)  # PIL save
+        pil_image = Image.fromarray(mosaic)
+        utils.clearml_task.clearml_logger.report_image(
+                    "GTvsPredictions",
+                    fname.stem,
+                    iteration=0,
+                    image=pil_image
+                )
+        pil_image.save(fname)  # PIL save
+
     return mosaic
 
 

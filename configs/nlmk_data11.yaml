@@ -1,6 +1,6 @@
-train: /home/rybin/Dev/assets/nlmk11/images/train
-val: /home/rybin/Dev/assets/nlmk11/images/val
-test: /home/rybin/Dev/assets/nlmk11/images/test
+train: /home/rybin/Dev/assets/dataset-nlmk11/images
+val: /home/rybin/Dev/assets/dataset-nlmk11/images
+test: /home/rybin/Dev/assets/dataset-nlmk11/images/test
 
 # number of classes
 nc: 17
