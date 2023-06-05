@@ -5,17 +5,18 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "TestDets-YOLOv7-data11",
+            "name": "TestDets",
             "type": "python",
             "request": "launch",
             "program": "test_detection.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--data", "configs/nlmk_data11.yaml", 
+                "--name", "yolov7-internimage_l",
+                "--data", "configs/nlmk_with_tflights.yaml", 
                 "--batch-size", "16",
-                "--detections", "labels-yolov5",
-                "--task", "test",
+                "--detections", "labels-internimage_l-new",
+                "--task", "train",
                 "--config", "configs/app_config.yaml"],
             "cwd": "${workspaceFolder}"
         },

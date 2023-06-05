@@ -12,7 +12,7 @@ import torch
 import yaml
 import shutil
 from tqdm import tqdm
-from tidecv import TIDE, datasets, Data
+from tidecv import TIDE, Data
 import matplotlib.pyplot as plt
 
 import utils.clearml_task
@@ -71,12 +71,12 @@ def test(data,
     niou = iouv.numel()
 
     # Dataloader
-    task = opt.task if opt.task in ('val', 'test') else 'val'  # path to train/val/test images
+    task = opt.task #if opt.task in ('val', 'test') else 'val'  # path to train/val/test images
     dataloader_det = \
-    create_dataloader(data[task], imgsz, batch_size, 32, opt=opt, pad=0.5, rect=True, labels_dir=detections,
+    create_dataloader(data[task], imgsz, batch_size, 32, opt=opt, pad=0.5, rect=False, labels_dir=detections,
                       prefix=colorstr(f'{task}: '))[0]
     dataloader_grt = \
-    create_dataloader(data[task], imgsz, batch_size, 32, opt=opt, pad=0.5, rect=True, labels_dir="labels",
+    create_dataloader(data[task], imgsz, batch_size, 32, opt=opt, pad=0.5, rect=False, labels_dir="labels",
                       prefix=colorstr(f'{task}: '))[0]
     seen = 0
     confusion_matrix = ConfusionMatrix(nc=nc)
@@ -103,6 +103,9 @@ def test(data,
         targets = targets.to(device)
         targets = torch.hstack([targets[:, :1], targets[:, 2:]])
         targets[:, 2:] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
+        # t = torch.clone(targets[targets[:, 1]>=16])
+        # t[:, 1] = 16
+        # targets[targets[:, 1]>=16] = t
 
         netouts = netouts.to(device)
         netouts = torch.hstack([netouts[:, :1], netouts[:, 3:], netouts[:, 1:3]])
@@ -110,8 +113,14 @@ def test(data,
         netouts[:, 1:5] = xywh2xyxy(netouts[:, 1:5])
         netouts = [netouts[netouts[:, 0] == i, 1:] for i in range(img.shape[0])]
 
+
         # Statistics per image
         for si, pred in enumerate(netouts):
+
+            # t = torch.clone(pred[pred[:, -1]>=16])
+            # t[:, -1] = 16
+            # pred[pred[:, -1]>=16] = t
+
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
             tcls = labels[:, 0].tolist() if nl else []  # target class
@@ -164,7 +173,7 @@ def test(data,
             stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls))
 
         # Plot images
-        if plots and batch_i < 5:
+        if plots and batch_i < 10:
             f = save_dir / f'test_batch{batch_i}_labels.jpg'  # labels
             Thread(target=plot_images, args=(img, targets, paths, f, names), daemon=True).start()
             f = save_dir / f'test_batch{batch_i}_pred.jpg'  # predictions
@@ -235,11 +244,7 @@ if __name__ == '__main__':
     parser.add_argument('--task', default='test', help='train, val, test, speed or study')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--single-cls', action='store_true', help='treat as single-class dataset')
-    parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--verbose', action='store_true', help='report mAP by class')
-    parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
-    parser.add_argument('--save-hybrid', action='store_true', help='save label+prediction hybrid results to *.txt')
-    parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--project', default='runs/test', help='save to project/name')
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
