@@ -354,7 +354,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
     def __init__(self, path, img_size=640, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
                  cache_images=False, single_cls=False, stride=32, pad=0.0, labels_dir='labels', prefix=''):
         self.img_size = img_size
-        self.augment = augment
+        self.augment = False
         self.hyp = hyp
         self.image_weights = image_weights
         self.rect = False if image_weights else rect
@@ -749,26 +749,4 @@ def extract_boxes(path='../coco/'):  # from utils.datasets import *; extract_box
                     b[[1, 3]] = np.clip(b[[1, 3]], 0, h)
                     assert cv2.imwrite(str(f), im[b[1]:b[3], b[0]:b[2]]), f'box failure in {f}'
 
-
-def autosplit(path='../coco', weights=(0.9, 0.1, 0.0), annotated_only=False):
-    """ Autosplit a dataset into train/val/test splits and save path/autosplit_*.txt files
-    Usage: from utils.datasets import *; autosplit('../coco')
-    Arguments
-        path:           Path to images directory
-        weights:        Train, val, test weights (list)
-        annotated_only: Only use images with an annotated txt file
-    """
-    path = Path(path)  # images dir
-    files = sum([list(path.rglob(f"*.{img_ext}")) for img_ext in img_formats], [])  # image files only
-    n = len(files)  # number of files
-    indices = random.choices([0, 1, 2], weights=weights, k=n)  # assign each image to a split
-
-    txt = ['autosplit_train.txt', 'autosplit_val.txt', 'autosplit_test.txt']  # 3 txt files
-    [(path / x).unlink() for x in txt if (path / x).exists()]  # remove existing
-
-    print(f'Autosplitting images from {path}' + ', using *.txt labeled images only' * annotated_only)
-    for i, img in tqdm(zip(indices, files), total=n):
-        if not annotated_only or Path(img2label_paths([str(img)])[0]).exists():  # check label
-            with open(path / txt[i], 'a') as f:
-                f.write(str(img) + '\n')  # add image to txt file
 

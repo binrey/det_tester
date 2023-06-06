@@ -7,7 +7,7 @@ s3:
 train:
   clearml_arguments:
     project_name: Detection
-    tag: yolov7
+    tag: yolovnas
     task_name: Test
     packages: False
     docker_image: cvreg.locotech-signal.ru/yolov5:latest

@@ -12,11 +12,11 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--name", "yolov7-internimage_l",
-                "--data", "configs/nlmk_with_tflights.yaml", 
-                "--batch-size", "16",
-                "--detections", "labels-internimage_l-new",
-                "--task", "train",
+                "--name", "yolov7",
+                "--data", "configs/nlmk_data11.yaml", 
+                "--batch-size", "4",
+                "--detections", "labels-yolov7-640x640",
+                "--task", "tmp",
                 "--config", "configs/app_config.yaml"],
             "cwd": "${workspaceFolder}"
         },
