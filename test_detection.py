@@ -259,9 +259,9 @@ if __name__ == '__main__':
 
     clearml_init_task(opt)
 
-    if opt.task in ('train', 'val', 'test'):  # run normally
-        test(data=opt.data,
-             detections=opt.detections,
-             batch_size=opt.batch_size,
-             verbose=opt.verbose,
-             )
+ 
+    test(data=opt.data,
+        detections=opt.detections,
+        batch_size=opt.batch_size,
+        verbose=opt.verbose,
+        )
