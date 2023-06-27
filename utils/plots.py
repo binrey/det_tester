@@ -111,18 +111,8 @@ def output_to_target(output):
     return np.array(targets)
 
 
-def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max_size=1024, max_subplots=16):
+def plot_images(images, bboxes, labs, confs, paths=None, fname='images.jpg', names=None, max_size=1024, max_subplots=16, log2clearml=False):
     # Plot image grid with labels
-
-    if isinstance(images, torch.Tensor):
-        images = images.cpu().float().numpy()
-    if isinstance(targets, torch.Tensor):
-        targets = targets.cpu().numpy()
-
-    # un-normalise
-    if np.max(images[0]) <= 1:
-        images *= 255
-
     tl = 3  # line thickness
     tf = max(tl - 1, 1)  # font thickness
     bs, _, h, w = images.shape  # batch size, _, height, width
@@ -149,27 +139,35 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             img = cv2.resize(img, (w, h))
 
         mosaic[block_y:block_y + h, block_x:block_x + w, :] = img
-        if len(targets) > 0:
-            image_targets = targets[targets[:, 0] == i]
-            boxes = xywh2xyxy(image_targets[:, 2:6]).T
-            classes = image_targets[:, 1].astype('int')
-            labels = image_targets.shape[1] == 6  # labels if no conf column
-            conf = None if labels else image_targets[:, 6]  # check for confidence presence (label vs pred)
+        if len(bboxes) > 0:
+            ibboxes = bboxes[i].T
+            ilabs = labs[i]
+            if confs is None:
+                labels = True
+            else:
+                iconf = confs[i]
+                labels = False
+            
+            # boxes = xywh2xyxy(image_targets[:, 2:6]).T
+            # boxes = image_targets[:, 2:6].T
+            # ilabs = image_targets[:, 1].astype('int')
+            # labels = image_targets.shape[1] == 6  # labels if no conf column
+            # conf = None if labels else image_targets[:, 6]  # check for confidence presence (label vs pred)
 
-            if boxes.shape[1]:
-                if boxes.max() <= 1.01:  # if normalized with tolerance 0.01
-                    boxes[[0, 2]] *= w  # scale to pixels
-                    boxes[[1, 3]] *= h
+            if ibboxes.shape[1]:
+                if ibboxes.max() <= 1.01:  # if normalized with tolerance 0.01
+                    ibboxes[[0, 2]] *= w  # scale to pixels
+                    ibboxes[[1, 3]] *= h
                 elif scale_factor < 1:  # absolute coords need scale if image scales
-                    boxes *= scale_factor
-            boxes[[0, 2]] += block_x
-            boxes[[1, 3]] += block_y
-            for j, box in enumerate(boxes.T):
-                cls = int(classes[j])
+                    ibboxes *= scale_factor
+            ibboxes[[0, 2]] += block_x
+            ibboxes[[1, 3]] += block_y
+            for j, box in enumerate(ibboxes.T):
+                cls = int(ilabs[j])
                 color = colors[cls % len(colors)]
                 cls = names[cls] if names else cls
-                if labels or conf[j] > 0.25:  # 0.25 conf thresh
-                    label = '%s' % cls if labels else '%s %.1f' % (cls, conf[j])
+                if labels or iconf[j] > 0.25:  # 0.25 conf thresh
+                    label = '%s' % cls if labels else '%s %.1f' % (cls, iconf[j])
                     plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl)
 
         # Draw image filename labels
@@ -187,12 +185,13 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
         mosaic = cv2.resize(mosaic, (int(ns * w * r), int(ns * h * r)), interpolation=cv2.INTER_AREA)
         # cv2.imwrite(fname, cv2.cvtColor(mosaic, cv2.COLOR_BGR2RGB))  # cv2 save
         pil_image = Image.fromarray(mosaic)
-        utils.clearml_task.clearml_logger.report_image(
-                    "GTvsPredictions",
-                    fname.stem,
-                    iteration=0,
-                    image=pil_image
-                )
+        if log2clearml:
+            utils.clearml_task.clearml_logger.report_image(
+                        "GTvsPredictions",
+                        fname.stem,
+                        iteration=0,
+                        image=pil_image
+                    )
         pil_image.save(fname)  # PIL save
 
     return mosaic

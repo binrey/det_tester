@@ -1,9 +1,11 @@
 train: /home/rybin/Dev/assets/nlmk11/images/train
 val: /home/rybin/Dev/assets/nlmk11/images/val
 test: /home/rybin/Dev/assets/nlmk11/images/test
+tftest: /home/rybin/Dev/assets/nlmk11/images/tftest
 
 # number of classes
 nc: 17
 
 # class names
-names: [ 'train', 'car', 'person', 'worker', 'traffic_light', 'letter', 'milestone', 'pillar', 'dead_stop', 'bicycle', 'motorcycle', 'sign', 'sound_signal', 'maneuver', 'hand_shifter_left', 'hand_shifter_right', 'derail']
+names: [ 'train', 'car', 'person', 'worker', 'traffic_light', 'letter', 'milestone', 'pillar', 'dead_stop', 
+         'bicycle', 'motorcycle', 'sign', 'sound_signal', 'maneuver', 'hand_shifter_right', 'hand_shifter_left', 'derail']

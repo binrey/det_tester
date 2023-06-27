@@ -18,8 +18,8 @@ import torch
 import torchvision
 import yaml
 
-from utils.google_utils import gsutil_getsize
-from utils.metrics import fitness
+# from utils.google_utils import gsutil_getsize
+# from utils.metrics import fitness
 #from utils.torch_utils import init_torch_seeds
 
 # Settings
@@ -453,6 +453,9 @@ def box_iou(box1, box2):
         iou (Tensor[N, M]): the NxM matrix containing the pairwise
             IoU values for every element in boxes1 and boxes2
     """
+
+    box1 = torch.Tensor(box1)
+    box2 = torch.Tensor(box2)
 
     def box_area(box):
         # box = 4xn
@@ -890,3 +893,94 @@ def increment_path(path, exist_ok=True, sep=''):
         i = [int(m.groups()[0]) for m in matches if m]  # indices
         n = max(i) + 1 if i else 2  # increment number
         return f"{path}{sep}{n}"  # update path
+
+
+
+
+
+
+
+
+
+
+class ImageLoader:
+    def __init__(self, img_size, with_letterbox=True):
+        self.img_size = img_size
+        self.with_letterbox = with_letterbox
+        self.h0, self.w0, self.h, self.w = None, None, None, None
+        self.pads = (0, 0)
+        
+    def letterbox(self, img, color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
+        new_shape = (self.img_size, self.img_size)
+        # Resize and pad image while meeting stride-multiple constraints
+        shape = img.shape[:2]  # current shape [height, width]
+        if isinstance(new_shape, int):
+            new_shape = (new_shape, new_shape)
+
+        # Scale ratio (new / old)
+        r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+        if not scaleup:  # only scale down, do not scale up (for better test mAP)
+            r = min(r, 1.0)
+
+        # Compute padding
+        ratio = r, r  # width, height ratios
+        new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
+        dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
+        if auto:  # minimum rectangle
+            dw, dh = np.mod(dw, stride), np.mod(dh, stride)  # wh padding
+        elif scaleFill:  # stretch
+            dw, dh = 0.0, 0.0
+            new_unpad = (new_shape[1], new_shape[0])
+            ratio = new_shape[1] / shape[1], new_shape[0] / shape[0]  # width, height ratios
+
+        dw /= 2  # divide padding into 2 sides
+        dh /= 2
+
+        if shape[::-1] != new_unpad:  # resize
+            img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
+        top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+        left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+        img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
+        return img, ratio, (dw, dh)
+
+    def load_image(self, source):
+        from pathlib import PosixPath
+        if type(source) is str or type(source) is PosixPath:
+            img = cv2.cvtColor(cv2.imread(str(source)), cv2.COLOR_BGR2RGB)  # BGR
+            assert img is not None, 'Image Not Found ' + source
+        elif type(source) is np.ndarray:
+            img = source.copy()
+        else:
+            print("!!! parameter source must be ndarray, string or pathlib object")
+            raise TypeError
+        self.h0, self.w0 = img.shape[:2]  # orig hw
+        r = self.img_size / max(self.h0, self.w0)  # resize image to img_size
+        if r != 1:  # always resize down, only resize up if training with augmentation
+            interp = cv2.INTER_AREA if r < 1 else cv2.INTER_LINEAR
+            img = cv2.resize(img, (int(self.w0 * r), int(self.h0 * r)), interpolation=interp)
+        self.h, self.w = img.shape[:2]
+        if self.with_letterbox:
+            img, ratio, self.pads = self.letterbox(img, auto=False, scaleup=True)
+        return img
+        
+    def correct_bboxes(self, bboxes_abs_xyxy:np.ndarray):
+        rw = float(self.w)/self.w0
+        rh = float(self.h)/self.h0 
+        bboxes = bboxes_abs_xyxy.copy()
+        bboxes[:, 0] = bboxes[:, 0]*rw + self.pads[0]
+        bboxes[:, 1] = bboxes[:, 1]*rh + self.pads[1]
+        bboxes[:, 2] = bboxes[:, 2]*rw + self.pads[0]
+        bboxes[:, 3] = bboxes[:, 3]*rh + self.pads[1]
+        return bboxes
+
+
+if __name__ == "__main__":
+    bboxes = np.array([[0, 0, 1200, 1000], [0, 0, 600, 500], [0, 0, 300, 250]])
+    img_loader = ImageLoader(640, with_letterbox=True)
+    # img = img_loader.load_image(np.zeros((1000, 1200), dtype=np.uint8))
+    img = img_loader.load_image(Path("/home/rybin/Dev/assets/nlmk11/images/tftest/1 0231.jpg"))
+    bboxes = img_loader.correct_bboxes(bboxes)
+    print(img.shape, "\n", bboxes)
+    for i in range(bboxes.shape[0]):
+        cv2.rectangle(img, bboxes[i, :2].astype(int), bboxes[i, 2:].astype(int), (200, 200, 200), 3)
+    cv2.imwrite("out.png", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))

@@ -15,7 +15,7 @@ def fitness(x):
     return (x[:, :4] * w).sum(1)
 
 
-def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names=()):
+def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names=(), log2clearml=False):
     """ Compute the average precision, given the recall and precision curves.
     Source: https://github.com/rafaelpadilla/Object-Detection-Metrics.
     # Arguments
@@ -69,10 +69,10 @@ def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names
     # Compute F1 (harmonic mean of precision and recall)
     f1 = 2 * p * r / (p + r + 1e-16)
     if plot:
-        plot_pr_curve(px, py, ap, Path(save_dir) / 'PR_curve.png', names)
-        plot_mc_curve(px, f1, Path(save_dir) / 'F1_curve.png', names, ylabel='F1')
-        plot_mc_curve(px, p, Path(save_dir) / 'P_curve.png', names, ylabel='Precision')
-        plot_mc_curve(px, r, Path(save_dir) / 'R_curve.png', names, ylabel='Recall')
+        plot_pr_curve(px, py, ap, Path(save_dir) / 'PR_curve.png', names, log2clearml)
+        plot_mc_curve(px, f1, Path(save_dir) / 'F1_curve.png', names, ylabel='F1', log2clearml=log2clearml)
+        plot_mc_curve(px, p, Path(save_dir) / 'P_curve.png', names, ylabel='Precision', log2clearml=log2clearml)
+        plot_mc_curve(px, r, Path(save_dir) / 'R_curve.png', names, ylabel='Recall', log2clearml=log2clearml)
 
     i = f1.mean(0).argmax()  # max F1 index
     return p[:, i], r[:, i], ap, f1[:, i], unique_classes.astype('int32')
@@ -108,11 +108,12 @@ def compute_ap(recall, precision):
 
 class ConfusionMatrix:
     # Updated version of https://github.com/kaanakan/object_detection_confusion_matrix
-    def __init__(self, nc, conf=0.25, iou_thres=0.45):
+    def __init__(self, nc, conf=0.25, iou_thres=0.45, log2clearml=False):
         self.matrix = np.zeros((nc + 1, nc + 1))
         self.nc = nc  # number of classes
         self.conf = conf
         self.iou_thres = iou_thres
+        self.log2clearml = log2clearml
 
     def process_batch(self, detections, labels):
         """
@@ -125,13 +126,13 @@ class ConfusionMatrix:
             None, updates confusion matrix accordingly
         """
         detections = detections[detections[:, 4] > self.conf]
-        gt_classes = labels[:, 0].int()
-        detection_classes = detections[:, 5].int()
+        gt_classes = labels[:, 0].astype(int)
+        detection_classes = detections[:, 5].astype(int)
         iou = general.box_iou(labels[:, 1:], detections[:, :4])
 
-        x = torch.where(iou > self.iou_thres)
+        x = np.where(iou > self.iou_thres)
         if x[0].shape[0]:
-            matches = torch.cat((torch.stack(x, 1), iou[x[0], x[1]][:, None]), 1).cpu().numpy()
+            matches = np.concatenate((np.stack(x, 1), iou[x[0], x[1]][:, None]), 1)
             if x[0].shape[0] > 1:
                 matches = matches[matches[:, 2].argsort()[::-1]]
                 matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
@@ -172,7 +173,8 @@ class ConfusionMatrix:
                        yticklabels=names + ['background FN'] if labels else "auto").set_facecolor((1, 1, 1))
             fig.axes[0].set_xlabel('True')
             fig.axes[0].set_ylabel('Predicted')
-            utils.clearml_task.clearml_logger.report_matplotlib_figure("General metrics", "Confusion matrix", fig, report_interactive=False)
+            if self.log2clearml:
+                utils.clearml_task.clearml_logger.report_matplotlib_figure("General metrics", "Confusion matrix", fig, report_interactive=False)
             plt.title('Confusion matrix')
             fig.savefig(Path(save_dir) / 'confusion_matrix.png', dpi=250)
         except Exception as e:
@@ -185,7 +187,7 @@ class ConfusionMatrix:
 
 # Plots ----------------------------------------------------------------------------------------------------------------
 
-def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=()):
+def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=(), log2clearml=False):
     # Precision-recall curve
     fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
     py = np.stack(py, axis=1)
@@ -202,12 +204,13 @@ def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=()):
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    utils.clearml_task.clearml_logger.report_matplotlib_figure("General metrics", "Precision-recall curve", fig, report_interactive=False)
+    if log2clearml:
+        utils.clearml_task.clearml_logger.report_matplotlib_figure("General metrics", "Precision-recall curve", fig, report_interactive=False)
     ax.set_title('Precision-recall curve')
     fig.savefig(Path(save_dir), dpi=250)
 
 
-def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence', ylabel='Metric'):
+def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence', ylabel='Metric', log2clearml=False):
     # Metric-confidence curve
     fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
 
@@ -224,6 +227,7 @@ def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence'
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    utils.clearml_task.clearml_logger.report_matplotlib_figure("General metrics", f"{ylabel}-confidence curve", fig, report_interactive=False)
+    if log2clearml:
+        utils.clearml_task.clearml_logger.report_matplotlib_figure("General metrics", f"{ylabel}-confidence curve", fig, report_interactive=False)
     ax.set_title(f'{ylabel}-confidence curve')
     fig.savefig(Path(save_dir), dpi=250)
