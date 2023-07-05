@@ -27,11 +27,13 @@ from utils.plots import plot_images, output_to_target, plot_study_txt
 
 
 def clearml_init_task(opt):
-    config = get_data_from_yaml(opt.config)
-    initialize_clearml_task(clearml_arguments=config.train.clearml_arguments, s3_config=config.s3,
-                            remotely=opt.remotely,
-                            task_type=Task.TaskTypes.training)
-    utils.clearml_task.clearml_task.connect(config.to_dict())
+    s3config = get_data_from_yaml(opt.s3config)
+    initialize_clearml_task(project_name=opt.project, 
+                            task_name=opt.name, 
+                            tags=opt.tags, 
+                            s3_config=s3config, 
+                            task_type=Task.TaskTypes.testing)
+    utils.clearml_task.clearml_task.connect(s3config.to_dict())
     utils.clearml_task.clearml_task.connect(opt)
 
 
@@ -72,13 +74,11 @@ def test(imgs_path:PosixPath,
     jdict, stats, ap, ap_class = [], [], [], []
     # pbar = tqdm(zip(dataloader_grt, dataloader_det), desc=s, bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}")
     stats_per_image = {}
-    imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], []
+    imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot, maps4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], [], []
     for nimg, (img_id, ann_gt) in enumerate(tqdm(annset_gt.items())):
         if img_id not in annset_pr._annotations.keys():
-            
             continue
         ann_pr = annset_pr[img_id]
-
         bboxes_gt = ann_gt.boxes
         bboxes_pr = ann_pr.boxes
 
@@ -144,12 +144,20 @@ def test(imgs_path:PosixPath,
 
         # Append statistics (correct, conf, pcls, tcls)
         stats.append((correct, pred[:, 4], pred[:, 5], tcls))
-        stats_per_image.update({img_id: correct[:, 5].mean()})
+
+        stats4img = [np.concatenate(x, 0) for x in zip(*stats[-1:])]  # to numpy
+        if len(stats4img) and stats4img[0].any():
+            p, r, ap, f1, ap_class = ap_per_class(*stats4img, plot=False, save_dir=None, names=names, log2clearml=False)
+            ap = [ap[:, 0].mean(), ap[:, :].mean()]  # AP@0.5
+        else:
+            ap = [0, 0] if len(tcls) else [1, 1]
+        stats_per_image.update({img_id: ap})
 
         # Plot images
         nplot = int((nimg+1)/batch_size)
         if plots and nplot <= nplots:
             ids4plot.append(img_id)
+            maps4plot.append(f"{img_id} APs,%: {stats_per_image[img_id][0]*100:3.0f}, {stats_per_image[img_id][1]*100:3.0f}")
             img_loader = ImageLoader(imgsz)
             img = img_loader.load_image(imgs_path / img_id).transpose((2, 0, 1))
             gt_bboxes4plot.append(img_loader.correct_bboxes(labels[:, 1:]))
@@ -163,9 +171,9 @@ def test(imgs_path:PosixPath,
                 plot_images(imgs4plot, gt_bboxes4plot, gt_labs4plot, None, ids4plot, f, names, log2clearml=log2clearml)        
                 # Thread(target=plot_images, args=(imgs4plot, gt_bboxes4plot, gt_labs4plot, None, ids4plot, f, names, log2clearml=log2clearml), daemon=True).start()
                 f = save_dir / f"batch{nplot}_pred.jpg"  # predictions
-                plot_images(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, ids4plot, f, names, log2clearml=log2clearml)        
+                plot_images(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, maps4plot, f, names, log2clearml=log2clearml)        
                 # Thread(target=plot_images, args=(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, ids4plot, f, names, log2clearml=log2clearml), daemon=True).start()
-                imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], []
+                imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot, maps4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], [], []
 
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
@@ -195,6 +203,9 @@ def test(imgs_path:PosixPath,
                 ignore_index=True)
     if log2clearml:
         utils.clearml_task.clearml_logger.report_table("General metrics", "mAPs table", 0, metrics_table)
+
+    with open(save_dir / "metrics.txt", "w") as mf:
+        mf.write(metrics_table.to_string())
 
     # TIDE metrics
     try:
@@ -234,18 +245,12 @@ if __name__ == "__main__":
     parser.add_argument("--predicts", type=str, help="predictions in coco format")
     parser.add_argument("--batch-size", type=int, default=32, help="size of each image batch")
     parser.add_argument("--img-size", type=int, default=640, help="inference size (pixels)")
-    parser.add_argument("--conf-thres", type=float, default=0.001, help="object confidence threshold")
-    parser.add_argument("--iou-thres", type=float, default=0.65, help="IOU threshold for NMS")
-    parser.add_argument("--task", default="test", help="train, val, test, speed or study")
-    parser.add_argument("--device", default="", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
-    parser.add_argument("--single-cls", action="store_true", help="treat as single-class dataset")
-    parser.add_argument("--verbose", action="store_true", help="report mAP by class")
     parser.add_argument("--project", default="runs/test", help="save to project/name")
     parser.add_argument("--name", default="exp", help="save to project/name")
-    parser.add_argument("--exist-ok", action="store_true", help="existing project/name ok, do not increment")
-    parser.add_argument("--config", type=str, default="configs/config.yaml", help="Path to a config file.")
-    parser.add_argument("--remotely", action="store_true", help="Execute ClearML task remotely.")
+    parser.add_argument("--tags", type=str, nargs='+', default=[], help="clearml task tags")
+    parser.add_argument("--s3config", type=str, default="configs/config.yaml", help="Path to a config file.")
     parser.add_argument("--clearml", action="store_true", help="use clearml logging")
+    parser.add_argument("--exist-ok", action="store_true", help="existing project/name ok, do not increment")
 
     opt = parser.parse_args()
     print(opt)

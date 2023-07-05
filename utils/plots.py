@@ -172,7 +172,7 @@ def plot_images(images, bboxes, labs, confs, paths=None, fname='images.jpg', nam
 
         # Draw image filename labels
         if paths:
-            label = Path(paths[i]).name[:40]  # trim to 40 char
+            label = Path(paths[i]).name
             t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
             cv2.putText(mosaic, label, (block_x + 5, block_y + t_size[1] + 5), 0, tl / 3, [220, 220, 220], thickness=tf,
                         lineType=cv2.LINE_AA)

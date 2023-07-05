@@ -1,15 +1,5 @@
-s3:
-  endpoint_url: http://clearml.locotech-signal.ru:9000
-  aws_access_key_id: ZG37lfsv2ZiiXj5xNR3ds/d3dbrxUe+vXjkBF9yjlq0
-  aws_secret_access_key: AqxiDjU9FmECF2jMt3IBKcdDKljbnjaMLv5j0AClai8
-  bucket: rybin
-
-train:
-  clearml_arguments:
-    project_name: Detection
-    tag: yolov7
-    task_name: Test
-    packages: False
-    docker_image: cvreg.locotech-signal.ru/yolov5:latest
-    docker_args: --ipc=host -v /home/emelianov/workspace/data/Detection/8/0/yolo:/container/app/assets/data
-    execution_queue: ml_gpu_old_gpu1_high_q
+# s3:
+endpoint_url: http://clearml.locotech-signal.ru:9000
+aws_access_key_id: ZG37lfsv2ZiiXj5xNR3ds/d3dbrxUe+vXjkBF9yjlq0
+aws_secret_access_key: AqxiDjU9FmECF2jMt3IBKcdDKljbnjaMLv5j0AClai8
+bucket: rybin
