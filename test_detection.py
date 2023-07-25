@@ -23,7 +23,7 @@ from globox import AnnotationSet
 from utils.datasets import create_dataloader
 from utils.general import check_file, box_iou, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, increment_path, colorstr, ImageLoader
 from utils.metrics import ap_per_class, ConfusionMatrix
-from utils.plots import plot_images, output_to_target, plot_study_txt
+from utils.plots import plot_images, plot_data_stats
 
 
 def clearml_init_task(opt):
@@ -52,12 +52,13 @@ def test(imgs_path:PosixPath,
     det_data = Data("detections")
 
     # Directories
-    save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))  # increment run
+    save_dir = Path(increment_path(Path(opt.project) / "_".join([opt.name]+opt.tags), exist_ok=opt.exist_ok))  # increment run
     save_dir.mkdir(parents=True, exist_ok=True)  # make dir
 
-    # with open(data) as f:
-    #     data = yaml.load(f, Loader=yaml.SafeLoader)
+    # load ground truth dataset
     annset_gt = AnnotationSet.from_coco(grounds_annfile)
+    plot_data_stats(annset_gt, save_dir / "data_stats.png", log2clearml)
+
     annset_pr = AnnotationSet.from_coco(detections_annfile)
 
     # check_dataset(data)  # check
@@ -75,7 +76,9 @@ def test(imgs_path:PosixPath,
     # pbar = tqdm(zip(dataloader_grt, dataloader_det), desc=s, bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}")
     stats_per_image = {}
     imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot, maps4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], [], []
-    for nimg, (img_id, ann_gt) in enumerate(tqdm(annset_gt.items())):
+    sorted_ids = sorted(list(annset_gt.image_ids))
+    for nimg, img_id in enumerate(tqdm(sorted_ids)):
+        ann_gt = annset_gt[img_id]
         if img_id not in annset_pr._annotations.keys():
             continue
         ann_pr = annset_pr[img_id]
@@ -189,6 +192,7 @@ def test(imgs_path:PosixPath,
     columns = ["Class", "Images", "Labels", "P", "R", "mAP@.5", "mAP@.5:.95"]
     metrics_table = pd.DataFrame([], columns=columns)
     pf = "%20s" + "%12i" * 2 + "%12.3g" * 4  # print format
+    print(("%20s" + "%12s" * 2 + "%12s" * 4) % tuple(columns))
     print(pf % ("all", seen, nt.sum(), mp, mr, map50, map))
     metrics_table = pd.concat(
         [metrics_table, pd.DataFrame([["all", seen, nt.sum(), mp, mr, map50, map]], columns=columns)],
@@ -244,7 +248,8 @@ if __name__ == "__main__":
     parser.add_argument("--grounds", type=str, help="ground annotations coco format")    
     parser.add_argument("--predicts", type=str, help="predictions in coco format")
     parser.add_argument("--batch-size", type=int, default=32, help="size of each image batch")
-    parser.add_argument("--img-size", type=int, default=640, help="inference size (pixels)")
+    parser.add_argument("--nplots", type=int, default=5, help="number of plotted batches")    
+    parser.add_argument("--plot-size", type=int, default=1024, help="size of plotted images")
     parser.add_argument("--project", default="runs/test", help="save to project/name")
     parser.add_argument("--name", default="exp", help="save to project/name")
     parser.add_argument("--tags", type=str, nargs='+', default=[], help="clearml task tags")
@@ -256,4 +261,10 @@ if __name__ == "__main__":
     print(opt)
     if opt.clearml:
         clearml_init_task(opt)
-    test(Path(opt.data_path), opt.grounds, opt.predicts, batch_size=opt.batch_size, log2clearml=opt.clearml)
+    test(imgs_path=Path(opt.data_path), 
+         grounds_annfile=opt.grounds, 
+         detections_annfile=opt.predicts, 
+         batch_size=opt.batch_size, 
+         imgsz=opt.plot_size,
+         nplots=opt.nplots,
+         log2clearml=opt.clearml)

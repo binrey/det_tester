@@ -15,11 +15,13 @@ import pandas as pd
 import seaborn as sns
 import torch
 import yaml
+from math import ceil
 from PIL import Image, ImageDraw, ImageFont
 from scipy.signal import butter, filtfilt
-
-from utils.general import xywh2xyxy, xyxy2xywh
+from utils.general import xywh2xyxy, xyxy2xywh, freedman_diaconis
 from utils.metrics import fitness
+from globox import AnnotationSet
+
 
 # Settings
 matplotlib.rc('font', **{'size': 11})
@@ -111,7 +113,7 @@ def output_to_target(output):
     return np.array(targets)
 
 
-def plot_images(images, bboxes, labs, confs, paths=None, fname='images.jpg', names=None, max_size=1024, max_subplots=16, log2clearml=False):
+def plot_images(images, bboxes, labs, confs, paths=None, fname='images.jpg', names=None, max_size=5000, max_subplots=16, log2clearml=False):
     # Plot image grid with labels
     tl = 3  # line thickness
     tf = max(tl - 1, 1)  # font thickness
@@ -181,7 +183,7 @@ def plot_images(images, bboxes, labs, confs, paths=None, fname='images.jpg', nam
         cv2.rectangle(mosaic, (block_x, block_y), (block_x + w, block_y + h), (255, 255, 255), thickness=3)
 
     if fname:
-        r = min(1280. / max(h, w) / ns, 1.0)  # ratio to limit image size
+        r = min(max_size / max(h, w) / ns, 1.0)  # ratio to limit image size
         mosaic = cv2.resize(mosaic, (int(ns * w * r), int(ns * h * r)), interpolation=cv2.INTER_AREA)
         # cv2.imwrite(fname, cv2.cvtColor(mosaic, cv2.COLOR_BGR2RGB))  # cv2 save
         pil_image = Image.fromarray(mosaic)
@@ -494,3 +496,35 @@ def plot_skeleton_kpts(im, kpts, steps, orig_shape=None):
         if pos2[0] % 640 == 0 or pos2[1] % 640 == 0 or pos2[0]<0 or pos2[1]<0:
             continue
         cv2.line(im, pos1, pos2, (int(r), int(g), int(b)), thickness=2)
+
+
+def plot_data_stats(annset:AnnotationSet, fname="data_stats.png", log2clearml=False):
+    av_size = {}
+    for ann in annset:
+        img_av_size = (ann.image_size[0]*ann.image_size[1])**0.5
+        for box in ann.boxes:
+            lab = box.label
+            if lab not in av_size.keys():
+                av_size[lab] = []
+            av_size[lab].append((box.area**0.5)/img_av_size*100) #  Средний размер объекта в процентах от размера картинки
+    ncols = 3         
+    nrows = ceil(len(av_size)/ncols)  
+    fig, ax = plt.subplots(figsize=(8*ncols, 2*nrows))
+    n = 0
+    for lab, s in av_size.items():
+        n += 1
+        ax = plt.subplot(nrows, ncols, n)
+        nbins = freedman_diaconis(s, "bins")
+        h = plt.hist(s, bins=nbins, rwidth=1, density=True, histtype="stepfilled");
+        plt.grid(visible="on", which="both");
+        bin_max = h[0].argmax()
+        x = h[1][bin_max]
+        x_mid = (h[1][bin_max] + h[1][bin_max+1])/2
+        plt.text(x_mid, h[0][bin_max]*0.04, f"{x:4.1f}")
+        plt.plot([x_mid, x_mid], [0, h[0][bin_max]], linewidth=3);
+        plt.legend([f"{lab}: {str(len(s))} объектов"])
+        plt.tight_layout()
+    plt.savefig(fname)
+
+    if log2clearml:
+        utils.clearml_task.clearml_logger.report_matplotlib_figure("Data stats", "Average objects size distribution", fig, report_interactive=False)
