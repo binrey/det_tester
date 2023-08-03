@@ -506,10 +506,11 @@ def plot_data_stats(annset:AnnotationSet, fname="data_stats.png", log2clearml=Fa
             lab = box.label
             if lab not in av_size.keys():
                 av_size[lab] = []
-            av_size[lab].append((box.area**0.5)/img_av_size*100) #  Средний размер объекта в процентах от размера картинки
+            av_size[lab].append((box.area**0.5)/img_av_size) #  Средний размер объекта в процентах от размера картинки
     ncols = 3         
     nrows = ceil(len(av_size)/ncols)  
     fig, ax = plt.subplots(figsize=(8*ncols, 2*nrows))
+    fig.suptitle("Relative objects amount (y) vs relative size (x)")
     n = 0
     for lab, s in av_size.items():
         n += 1
@@ -520,9 +521,9 @@ def plot_data_stats(annset:AnnotationSet, fname="data_stats.png", log2clearml=Fa
         bin_max = h[0].argmax()
         x = h[1][bin_max]
         x_mid = (h[1][bin_max] + h[1][bin_max+1])/2
-        plt.text(x_mid, h[0][bin_max]*0.04, f"{x:4.1f}")
+        plt.text(x_mid, h[0][bin_max]*0.04, f"{x:4.3f}")
         plt.plot([x_mid, x_mid], [0, h[0][bin_max]], linewidth=3);
-        plt.legend([f"{lab}: {str(len(s))} объектов"])
+        plt.legend([f"{lab}: {str(len(s))} objects"])
         plt.tight_layout()
     plt.savefig(fname)
 

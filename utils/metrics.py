@@ -165,7 +165,7 @@ class ConfusionMatrix:
             array = self.matrix / (self.matrix.sum(0).reshape(1, self.nc + 1) + 1E-6)  # normalize
             array[array < 0.005] = np.nan  # don't annotate (would appear as 0.00)
 
-            fig = plt.figure(figsize=(12, 9), tight_layout=True)
+            fig = plt.figure(figsize=(12, 12), tight_layout=True)
             sn.set(font_scale=1.0 if self.nc < 50 else 0.8)  # for label size
             labels = (0 < len(names) < 99) and len(names) == self.nc  # apply names to ticklabels
             sn.heatmap(array, annot=self.nc < 30, annot_kws={"size": 8}, cmap='Blues', fmt='.2f', square=True,
@@ -175,7 +175,7 @@ class ConfusionMatrix:
             fig.axes[0].set_ylabel('Predicted')
             if self.log2clearml:
                 utils.clearml_task.clearml_logger.report_matplotlib_figure("General metrics", "Confusion matrix", fig, report_interactive=False)
-            plt.title('Confusion matrix')
+            plt.title('Confusion matrix', fontdict={'size': 20})
             fig.savefig(Path(save_dir) / 'confusion_matrix.png', dpi=250)
         except Exception as e:
             pass
