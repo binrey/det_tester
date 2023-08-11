@@ -1,0 +1,5 @@
+# s3:
+endpoint_url: http://clearml.locotech-signal.ru:9000
+aws_access_key_id: ZG37lfsv2ZiiXj5xNR3ds/d3dbrxUe+vXjkBF9yjlq0
+aws_secret_access_key: AqxiDjU9FmECF2jMt3IBKcdDKljbnjaMLv5j0AClai8
+bucket: rybin

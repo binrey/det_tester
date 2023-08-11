@@ -1,0 +1,9 @@
+train: /home/rybin/Dev/assets/nlmk11/images/train
+val: /home/rybin/Dev/assets/nlmk11/images/val
+test: /home/rybin/Dev/assets/nlmk11/images/test
+
+# number of classes
+nc: 21
+
+# class names
+names: ["bicycle", "blue", "car", "dead_stop", "derail", "green", "hand_shifter_left", "hand_shifter_right", "letter", "maneuver", "milestone", "motorcycle", "person", "pillar", "red", "sign", "sound_signal", "train", "unknown", "white", "worker"]
