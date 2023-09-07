@@ -26,6 +26,29 @@
             "cwd": "${workspaceFolder}"
         },
         {
+            "name": "TestTongroups",
+            "type": "python",
+            "request": "launch",
+            "program": "test_detection.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--name", "yolov7",
+                "--data_path", "/home/rybin/Dev/assets/tongroups/images/val", 
+                "--grounds", "/home/rybin/Dev/assets/tongroups/ann_with_nlmk_val.json",
+                "--predicts", "/home/rybin/Dev/yolov7/runs/detect/yolov7-tongroups-nlmk111-checktrain/annotation.json",                
+                "--batch-size", "4",
+                "--nplots", "1",
+                //"--add-data-stats",
+                //"--add-tide",
+                "--project", "Detection",
+                "--tags", "1280x1280", "tongroups-nlmk111",
+                //"--clearml",
+                "--exist-ok",
+                "--s3config", "configs/app_config.yaml"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
             "name": "TestCityscapes",
             "type": "python",
             "request": "launch",
