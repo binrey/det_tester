@@ -1,6 +1,7 @@
 train: /home/rybin/Dev/assets/nlmk11/images/train
 val: /home/rybin/Dev/assets/nlmk11/images/val
 test: /home/rybin/Dev/assets/nlmk11/images/test
+tmp: /home/rybin/Dev/assets/nlmk11/images/tmp
 tftest: /home/rybin/Dev/assets/nlmk11/images/tftest
 
 # number of classes

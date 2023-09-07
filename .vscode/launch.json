@@ -68,6 +68,12 @@
                 //"--clearml",
                 "--exist-ok",
                 "--s3config", "configs/app_config.yaml"],
+                "--name", "yolov7",
+                "--data", "configs/nlmk_data11.yaml", 
+                "--batch-size", "4",
+                "--detections", "labels-yolov7-640x640",
+                "--task", "tmp",
+                "--config", "configs/app_config.yaml"],
             "cwd": "${workspaceFolder}"
         },
     ]
