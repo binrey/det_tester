@@ -1,43 +1,27 @@
 import argparse
 import json
-import os
-import sys
+import shutil
 from pathlib import Path, PosixPath
 from threading import Thread
-import pandas as pd
-from PIL import Image
-from clearml import Task
-import numpy as np
-import torch
-import yaml
-import shutil
-from tqdm import tqdm
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import torch
+# from clearml import Task
+from globox import AnnotationSet
+from PIL import Image
+from tqdm import tqdm
 
 import utils.clearml_task
-from utils.clearml_task import initialize_clearml_task
-from utils.common import get_data_from_yaml
-from globox import AnnotationSet, BoundingBox
+from utils.clearml_task import clearml_init_task
+from utils.general import (ImageLoader, box_iou, increment_path)
+from utils.metrics import ConfusionMatrix, ap_per_class
 from utils.object_selector import ObjectSelector
-
-from utils.datasets import create_dataloader
-from utils.general import check_file, box_iou, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, increment_path, colorstr, ImageLoader
-from utils.metrics import ap_per_class, ConfusionMatrix
-from utils.plots import plot_images, plot_data_stats
+from utils.plots import plot_data_stats, plot_images
 
 
-def clearml_init_task(opt):
-    s3config = get_data_from_yaml(opt.s3config)
-    initialize_clearml_task(project_name=opt.project, 
-                            task_name=opt.name, 
-                            tags=opt.tags, 
-                            s3_config=s3config, 
-                            task_type=Task.TaskTypes.testing)
-    utils.clearml_task.clearml_task.connect(s3config.to_dict())
-    utils.clearml_task.clearml_task.connect(opt)
-
-
-def test(imgs_path:PosixPath,
+def test(imgs_path:str,
          grounds_annfile,
          detections_annfile,
          batch_size=32,
@@ -49,6 +33,11 @@ def test(imgs_path:PosixPath,
          add_tide=True
          ):
     
+    save_images = False
+    if imgs_path is not None:
+        save_images = True
+        imgs_path = Path(imgs_path)
+        
     if add_tide:
         from tidecv import TIDE, Data
         tide = TIDE()
@@ -74,7 +63,8 @@ def test(imgs_path:PosixPath,
     niou = len(iouv)
 
     seen = 0
-    boxes2plot = ObjectSelector(imgs_path)
+    if save_images:
+        boxes2plot = ObjectSelector(imgs_path)
     confusion_matrix = ConfusionMatrix(nc=nc, log2clearml=log2clearml)
     names = annset_gt._id_to_label
     # s = ("%20s" + "%12s" * 6) % ("Class", "Images", "Labels", "P", "R", "mAP@.5", "mAP@.5:.95")
@@ -152,8 +142,9 @@ def test(imgs_path:PosixPath,
                             correct[pi[j]] = ious[j] > iouv  # iou_thres is 1xn
                             if len(detected) == nl:  # all targets already located in image
                                 break
-                    for j in set(ti) - detected_set:
-                        boxes2plot.add_fn(img_id, bboxes_gt[j], image_size=ann_gt.image_size)
+                    if save_images:
+                        for j in set(ti) - detected_set:
+                            boxes2plot.add_fn(img_id, bboxes_gt[j], image_size=ann_gt.image_size)
 
         # Append statistics (correct, conf, pcls, tcls)
         stats.append((correct, pred[:, 4], pred[:, 5], tcls))
@@ -168,7 +159,7 @@ def test(imgs_path:PosixPath,
 
         # Plot images
         nplot = int((nimg+1)/batch_size)
-        if nplot <= nplots:
+        if save_images and nplot <= nplots:
             ids4plot.append(img_id)
             maps4plot.append(f"{img_id} APs,%: {stats_per_image[img_id][0]*100:3.0f}, {stats_per_image[img_id][1]*100:3.0f}")
             img_loader = ImageLoader(imgsz)
@@ -188,7 +179,8 @@ def test(imgs_path:PosixPath,
                 # Thread(target=plot_images, args=(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, ids4plot, f, names, log2clearml=log2clearml), daemon=True).start()
                 imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot, maps4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], [], []
 
-    boxes2plot.plot_fn(save_dir / "false_negatives.png", batch_size=20)
+    if save_images:
+        boxes2plot.plot_fn(save_dir / "false_negatives.png", batch_size=20)
 
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
@@ -257,10 +249,11 @@ def test(imgs_path:PosixPath,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="test.py")
-    parser.add_argument("--data_path", type=str, help="*.data path")
     parser.add_argument("--grounds", type=str, help="ground annotations coco format")    
-    parser.add_argument("--predicts", type=str, help="predictions in coco format")
-    parser.add_argument("--batch-size", type=int, default=32, help="size of each image batch")
+    parser.add_argument("--predicts", type=str, help="predictions in coco format")    
+    parser.add_argument("--images", type=str, default=None, help="data path")
+    parser.add_argument("--weights", type=str, default=None, help="path to model weights to be loaded into clearml")   
+    parser.add_argument("--batch-size", type=int, default=8, help="size of each image batch")
     parser.add_argument("--nplots", type=int, default=5, help="number of plotted batches")    
     parser.add_argument("--plot-size", type=int, default=1024, help="size of plotted images")
     parser.add_argument("--add-data-stats", action="store_true", help="calc and plot statistics of objects sizes") 
@@ -276,7 +269,7 @@ if __name__ == "__main__":
     print(opt)
     if opt.clearml:
         clearml_init_task(opt)
-    test(imgs_path=Path(opt.data_path), 
+    test(imgs_path=opt.images, 
          grounds_annfile=opt.grounds, 
          detections_annfile=opt.predicts, 
          batch_size=opt.batch_size, 

@@ -1,4 +1,5 @@
-from clearml import Task
+from clearml import Task, OutputModel
+from utils.common import get_data_from_yaml
 
 from utils.s3 import initialize_s3_resource
 
@@ -15,10 +16,18 @@ def initialize_clearml_task(project_name, task_name, tags, s3_config,
                              auto_connect_arg_parser=True)
     clearml_logger = clearml_task.get_logger()
     initialize_s3_resource(s3_config)
-    # if remotely:
-    #     clearml_task.set_base_docker(docker_image=clearml_arguments.docker_image,
-    #                                  docker_arguments=clearml_arguments.docker_args)
-    #     if no_queue:
-    #         clearml_task.execute_remotely()
-    #     else:
-    #         clearml_task.execute_remotely(queue_name=clearml_arguments.queue_name)
+
+    
+def clearml_init_task(opt):
+    s3config = get_data_from_yaml(opt.s3config)
+    initialize_clearml_task(project_name=opt.project, 
+                            task_name=opt.name, 
+                            tags=opt.tags, 
+                            s3_config=s3config, 
+                            task_type=Task.TaskTypes.testing)
+    clearml_task.connect(s3config.to_dict())
+    clearml_task.connect(opt)
+    if opt.weights is not None:
+        output_model = OutputModel(task=clearml_task)
+        output_model.update_weights(register_uri=opt.weights)
+
