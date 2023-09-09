@@ -1,9 +1,0 @@
-train: /home/rybin/Dev/assets/nlmk8/images/train
-val: /home/rybin/Dev/assets/nlmk8/images/val
-test: /home/rybin/Dev/assets/nlmk8/images/test
-
-# number of classes
-nc: 16
-
-# class names
-names: [ 'train', 'car', 'person', 'worker', 'traffic_light', 'letter', 'milestone', 'pillar', 'dead_stop', 'bicycle', 'motorcycle', 'sign', 'sound_signal', 'maneuver', 'hand_shifter_left', 'hand_shifter_right']
