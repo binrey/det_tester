@@ -1,0 +1,32 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "TestNLMK",
+            "type": "python",
+            "request": "launch",
+            "program": "test_detection.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--name", "yolov7",
+                "--images", "/mnt/work_share/DWH/DataSets/Detection/11/0/yolo/images/test",
+                "--weights", "smb://10.10.50.26/work_share/developers/rybin/models/ObjectDetection/yolov7-1280-cls17/weights/best.pt",
+                "--grounds", "/mnt/work_share/DWH/DataSets/Detection/11/1/labels/ann_det11.1_test.json",
+                "--predicts", "/mnt/work_share/developers/rybin/models/ObjectDetection/yolov7-1280-cls17/test/annotation.json",                
+                "--batch-size", "4",
+                "--nplots", "5",
+                "--project", "Testing",
+                "--tags", "1280x1280", "det11",
+                "--add-data-stats",
+                "--add-tide",
+                "--clearml",
+                "--exist-ok",
+                "--s3config", "clearml_config.yaml"],
+            "cwd": "${workspaceFolder}"
+        },
+    ]
+}
