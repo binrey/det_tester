@@ -1,14 +1,12 @@
 import argparse
 import json
 import shutil
-from pathlib import Path, PosixPath
+from pathlib import Path
 from threading import Thread
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import torch
-# from clearml import Task
 from globox import AnnotationSet
 from PIL import Image
 from tqdm import tqdm
@@ -21,7 +19,7 @@ from utils.object_selector import ObjectSelector
 from utils.plots import plot_data_stats, plot_images
 
 
-def test(imgs_path:str,
+def main(imgs_path:str,
          grounds_annfile,
          detections_annfile,
          batch_size=32,
@@ -74,7 +72,7 @@ def test(imgs_path:str,
     stats_per_image = {}
     imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot, maps4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], [], []
     sorted_ids = sorted(list(annset_gt.image_ids))
-    for nimg, img_id in enumerate(tqdm(sorted_ids)):
+    for nimg, img_id in enumerate(tqdm(sorted_ids, "process detections")):
         ann_gt = annset_gt[img_id]
         if img_id not in annset_pr._annotations.keys():
             continue
@@ -103,7 +101,7 @@ def test(imgs_path:str,
 
         if len(pred) == 0:
             if nl:
-                stats.append((torch.zeros(0, niou, dtype=torch.bool), torch.Tensor(), torch.Tensor(), tcls))
+                stats.append((np.zeros((0, niou)), np.array([]), np.array([]), tcls))
             continue
 
         # Predictions
@@ -129,8 +127,11 @@ def test(imgs_path:str,
                 # Search for detections
                 if pi.shape[0]:
                     # Prediction to target ious
-                    ious, i = box_iou(predn[pi, :4], tbox[ti]).max(1)  # best ious, indices
-                    ious = ious.numpy()  # TODO
+                    iou_matrix = box_iou(predn[pi, :4], tbox[ti])
+                    i = iou_matrix.argmax(1)
+                    ious = [iou_matrix[irow, icol] for irow, icol in enumerate(i)]
+                    # ious, i = box_iou(predn[pi, :4], tbox[ti]).max(1)  # best ious, indices
+                    # ious = ious.numpy()  # TODO
                     # Append detections
                     detected_set = set()
                     for j in (ious >= iouv[0]).nonzero()[0]:
@@ -172,11 +173,13 @@ def test(imgs_path:str,
             imgs4plot[len(ids4plot)-1] = img
             if len(ids4plot) == batch_size:
                 f = save_dir / f"batch{nplot}_gtruth.jpg"  # labels
-                plot_images(imgs4plot, gt_bboxes4plot, gt_labs4plot, None, ids4plot, f, names, log2clearml=log2clearml)        
-                # Thread(target=plot_images, args=(imgs4plot, gt_bboxes4plot, gt_labs4plot, None, ids4plot, f, names, log2clearml=log2clearml), daemon=True).start()
+                # plot_images(imgs4plot, gt_bboxes4plot, gt_labs4plot, None, ids4plot, f, names, log2clearml=log2clearml)        
+                Thread(target=plot_images, args=(imgs4plot, gt_bboxes4plot, gt_labs4plot, None, ids4plot, f, names), 
+                       kwargs={"log2clearml":log2clearml}, daemon=True).start()
                 f = save_dir / f"batch{nplot}_pred.jpg"  # predictions
-                plot_images(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, maps4plot, f, names, log2clearml=log2clearml)        
-                # Thread(target=plot_images, args=(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, ids4plot, f, names, log2clearml=log2clearml), daemon=True).start()
+                # plot_images(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, maps4plot, f, names, log2clearml=log2clearml)        
+                Thread(target=plot_images, args=(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, maps4plot, f, names), 
+                       kwargs={"log2clearml": log2clearml}, daemon=True).start()
                 imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot, maps4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], [], []
 
     if save_images:
@@ -190,7 +193,7 @@ def test(imgs_path:str,
         mp, mr, map50, map = p.mean(), r.mean(), ap50.mean(), ap.mean()
         nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
     else:
-        nt = torch.zeros(1)
+        nt = np.zeros(1)
 
     # Print results
     columns = ["Class", "Images", "Labels", "P", "R", "mAP@.5", "mAP@.5:.95"]
@@ -258,8 +261,8 @@ if __name__ == "__main__":
     parser.add_argument("--plot-size", type=int, default=1024, help="size of plotted images")
     parser.add_argument("--add-data-stats", action="store_true", help="calc and plot statistics of objects sizes") 
     parser.add_argument("--add-tide", action="store_true", help="calc and plot TIDE metric")        
-    parser.add_argument("--project", default="runs/test", help="save to project/name")
-    parser.add_argument("--name", default="exp", help="save to project/name")
+    parser.add_argument("--project", default="Testing", help="project name in ClearML")
+    parser.add_argument("--name", default="example", help="save to project/name")
     parser.add_argument("--tags", type=str, nargs='+', default=[], help="clearml task tags")
     parser.add_argument("--s3config", type=str, default="configs/config.yaml", help="Path to a config file.")
     parser.add_argument("--clearml", action="store_true", help="use clearml logging")
@@ -269,7 +272,7 @@ if __name__ == "__main__":
     print(opt)
     if opt.clearml:
         clearml_init_task(opt)
-    test(imgs_path=opt.images, 
+    main(imgs_path=opt.images, 
          grounds_annfile=opt.grounds, 
          detections_annfile=opt.predicts, 
          batch_size=opt.batch_size, 

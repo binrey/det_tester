@@ -1,7 +1,5 @@
 import os
 
-import utils.s3
-
 
 def get_prefix(model_info):
     storage_key_prefix = model_info.task.metrics_manager.storage_key_prefix

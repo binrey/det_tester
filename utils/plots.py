@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import torch
 import yaml
 from math import ceil
 from PIL import Image, ImageDraw, ImageFont
@@ -21,6 +20,7 @@ from scipy.signal import butter, filtfilt
 from utils.general import xywh2xyxy, xyxy2xywh, freedman_diaconis
 from utils.metrics import fitness
 from globox import AnnotationSet
+from tqdm import tqdm
 
 
 # Settings
@@ -500,7 +500,7 @@ def plot_skeleton_kpts(im, kpts, steps, orig_shape=None):
 
 def plot_data_stats(annset:AnnotationSet, fname="data_stats.png", log2clearml=False):
     av_size = {}
-    for ann in annset:
+    for ann in tqdm(annset, "calc data stats"):
         img_av_size = (ann.image_size[0]*ann.image_size[1])**0.5
         for box in ann.boxes:
             lab = box.label

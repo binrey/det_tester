@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 from random import shuffle
+from tqdm import tqdm
 
 
 class ObjectSelector:
@@ -37,7 +38,7 @@ class ObjectSelector:
 
     def draw(self, examples, path2save, ncols=5, img_size=(120, 120), pad=10):
         irow = 0
-        for lab in examples.keys():
+        for lab in tqdm(examples.keys(), "process false negatives"):
             if len(examples[lab]) == 0:
                 continue
             shuffle(examples[lab])

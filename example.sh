@@ -1,0 +1,15 @@
+python test_detection.py \
+    --grounds=/mnt/work_share/DWH/DataSets/Detection/11/1/labels/ann_det11.1_test.json \
+    --predicts=/mnt/work_share/developers/rybin/models/ObjectDetection/yolov7-1280-cls17/test/annotation.json \
+    --name=yolov7 \
+    --images=/mnt/work_share/DWH/DataSets/Detection/11/0/yolo/images/test \
+    --weights=smb://10.10.50.26/work_share/developers/rybin/models/ObjectDetection/yolov7-1280-cls17/weights/best.pt \
+    --batch-size=8 \
+    --nplots=5 \
+    --project=Testing \
+    --tags="1280x1280 det11" \
+    --add-data-stats \
+    --add-tide \
+    --clearml \
+    --exist-ok \
+    --s3config=clearml_config.yaml \
