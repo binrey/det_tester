@@ -26,9 +26,9 @@ def main(imgs_path:str,
          nplots=10,
          imgsz=1024,
          log2clearml=False,
-         save_dir=Path(""),
          add_data_stats=True,
-         add_tide=True
+         add_tide=True,
+         add_false_negatives=True
          ):
     
     save_images = False
@@ -182,7 +182,7 @@ def main(imgs_path:str,
                        kwargs={"log2clearml": log2clearml}, daemon=True).start()
                 imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot, maps4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], [], []
 
-    if save_images:
+    if save_images and add_false_negatives:
         boxes2plot.plot_fn(save_dir / "false_negatives.png", batch_size=20)
 
     # Compute statistics
@@ -259,12 +259,14 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=8, help="size of each image batch")
     parser.add_argument("--nplots", type=int, default=5, help="number of plotted batches")    
     parser.add_argument("--plot-size", type=int, default=1024, help="size of plotted images")
-    parser.add_argument("--add-data-stats", action="store_true", help="calc and plot statistics of objects sizes") 
-    parser.add_argument("--add-tide", action="store_true", help="calc and plot TIDE metric")        
     parser.add_argument("--project", default="Testing", help="project name in ClearML")
     parser.add_argument("--name", default="example", help="save to project/name")
     parser.add_argument("--tags", type=str, nargs='+', default=[], help="clearml task tags")
     parser.add_argument("--s3config", type=str, default="configs/config.yaml", help="Path to a config file.")
+    parser.add_argument("--data-stats", action="store_true", help="calc and plot statistics of objects sizes") 
+    parser.add_argument("--tide", action="store_true", help="calc and plot TIDE metric")  
+    parser.add_argument("--false-negatives", action="store_true", help="add false negatives examples")          
+
     parser.add_argument("--clearml", action="store_true", help="use clearml logging")
     parser.add_argument("--exist-ok", action="store_true", help="existing project/name ok, do not increment")
 
@@ -278,6 +280,7 @@ if __name__ == "__main__":
          batch_size=opt.batch_size, 
          imgsz=opt.plot_size,
          nplots=opt.nplots,
-         add_data_stats = opt.add_data_stats,
-         add_tide = opt.add_tide,
+         add_data_stats = opt.data_stats,
+         add_tide = opt.tide,
+         add_false_negatives=opt.false_negatives,
          log2clearml=opt.clearml)

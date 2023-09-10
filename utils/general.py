@@ -333,7 +333,19 @@ def clip_coords(boxes, img_shape):
     boxes[:, 3].clamp_(0, img_shape[0])  # y2
 
 
-def box_iou(boxes1, boxes2):
+def area(boxes):
+  """Computes area of boxes.
+
+  Args:
+    boxes: Numpy array with shape [N, 4] holding N boxes
+
+  Returns:
+    a numpy array with shape [N*1] representing box areas
+  """
+  return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+
+
+def intersection(boxes1, boxes2):
     """Compute pairwise intersection areas between boxes.
 
     Args:
@@ -357,6 +369,24 @@ def box_iou(boxes1, boxes2):
         np.zeros(all_pairs_max_xmin.shape),
         all_pairs_min_xmax - all_pairs_max_xmin)
     return intersect_heights * intersect_widths
+
+
+def box_iou(boxes1, boxes2):
+  """Computes pairwise intersection-over-union between box collections.
+
+  Args:
+    boxes1: a numpy array with shape [N, 4] holding N boxes.
+    boxes2: a numpy array with shape [M, 4] holding M boxes.
+
+  Returns:
+    a numpy array with shape [N, M] representing pairwise iou scores.
+  """
+  intersect = intersection(boxes1, boxes2)
+  area1 = area(boxes1)
+  area2 = area(boxes2)
+  union = np.expand_dims(area1, axis=1) + np.expand_dims(
+      area2, axis=0) - intersect
+  return intersect / union
 
 
 def increment_path(path, exist_ok=True, sep=''):
