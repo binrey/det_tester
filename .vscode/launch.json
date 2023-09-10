@@ -8,7 +8,7 @@
             "name": "TestNLMK",
             "type": "python",
             "request": "launch",
-            "program": "test_detection.py",
+            "program": "run.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
@@ -21,9 +21,9 @@
                 "--nplots", "5",
                 "--project", "Testing",
                 "--tags", "1280x1280", "det11",
-                "--add-data-stats",
-                "--add-tide",
-                "--clearml",
+                //"--data-stats",
+                //"--tide",
+                //"--clearml",
                 "--exist-ok",
                 "--s3config", "clearml_config.yaml"],
             "cwd": "${workspaceFolder}"

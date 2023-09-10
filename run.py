@@ -266,7 +266,6 @@ if __name__ == "__main__":
     parser.add_argument("--data-stats", action="store_true", help="calc and plot statistics of objects sizes") 
     parser.add_argument("--tide", action="store_true", help="calc and plot TIDE metric")  
     parser.add_argument("--false-negatives", action="store_true", help="add false negatives examples")          
-
     parser.add_argument("--clearml", action="store_true", help="use clearml logging")
     parser.add_argument("--exist-ok", action="store_true", help="existing project/name ok, do not increment")
 
