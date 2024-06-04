@@ -428,7 +428,7 @@ def freedman_diaconis(data, return_type):
     else:
         datmin, datmax = data.min(), data.max()
         datrng = datmax - datmin
-        result = int((datrng / bw) + 1)
+        result = int(max((datrng / bw) + 1, 1))
     return(result)
 
 
