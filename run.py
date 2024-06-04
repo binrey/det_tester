@@ -3,6 +3,7 @@ import json
 import shutil
 from pathlib import Path
 from threading import Thread
+from utils.dataloading import MyAnnotationSet
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,11 +18,16 @@ from utils.general import (ImageLoader, box_iou, increment_path)
 from utils.metrics import ConfusionMatrix, ap_per_class
 from utils.object_selector import ObjectSelector
 from utils.plots import plot_data_stats, plot_images
-
+  
+  
+import os
+os.environ["CURL_CA_BUNDLE"] = "/home/rybin-av/myCA.crt"
+os.environ["REQUESTS_CA_BUNDLE"] = "/home/rybin-av/myCA.crt"
 
 def main(imgs_path:str,
          grounds_annfile,
          detections_annfile,
+         labels,
          batch_size=32,
          nplots=10,
          imgsz=1024,
@@ -47,12 +53,13 @@ def main(imgs_path:str,
     save_dir.mkdir(parents=True, exist_ok=True)  # make dir
 
     # load ground truth dataset
-    annset_gt = AnnotationSet.from_coco(grounds_annfile)
+    annset_gt = MyAnnotationSet.from_markup(grounds_annfile, labels)
     
     if add_data_stats:
         plot_data_stats(annset_gt, save_dir / "data_stats.png", log2clearml)
 
-    annset_pr = AnnotationSet.from_coco(detections_annfile)
+    # load detections dataset
+    annset_pr = MyAnnotationSet.from_markup(detections_annfile, labels)
 
     # check_dataset(data)  # check
     nc = len(annset_gt._id_to_label)
@@ -175,13 +182,12 @@ def main(imgs_path:str,
                 f = save_dir / f"batch{nplot}_gtruth.jpg"  # labels
                 # plot_images(imgs4plot, gt_bboxes4plot, gt_labs4plot, None, ids4plot, f, names, log2clearml=log2clearml)        
                 Thread(target=plot_images, args=(imgs4plot, gt_bboxes4plot, gt_labs4plot, None, ids4plot, f, names), 
-                       kwargs={"log2clearml":log2clearml}, daemon=True).start()
+                    kwargs={"log2clearml":log2clearml}, daemon=True).start()
                 f = save_dir / f"batch{nplot}_pred.jpg"  # predictions
                 # plot_images(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, maps4plot, f, names, log2clearml=log2clearml)        
                 Thread(target=plot_images, args=(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, maps4plot, f, names), 
-                       kwargs={"log2clearml": log2clearml}, daemon=True).start()
+                    kwargs={"log2clearml": log2clearml}, daemon=True).start()
                 imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot, maps4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], [], []
-
     if save_images and add_false_negatives:
         boxes2plot.plot_fn(save_dir / "false_negatives.png", batch_size=20)
 
@@ -196,11 +202,11 @@ def main(imgs_path:str,
         nt = np.zeros(1)
 
     # Print results
-    columns = ["Class", "Images", "Labels", "P", "R", "mAP@.5", "mAP@.5:.95"]
+    columns = ["Class", "Images", "Labels", "P", "R", "mAP@.5%", "mAP@.5:.95%"]
     metrics_table = pd.DataFrame([], columns=columns)
     pf = "%20s" + "%12i" * 2 + "%12.3g" * 4  # print format
     print(("%20s" + "%12s" * 2 + "%12s" * 4) % tuple(columns))
-    print(pf % ("all", seen, nt.sum(), mp, mr, map50, map))
+    print(pf % ("all", seen, nt.sum(), mp, mr, map50*100, map*100))
     metrics_table = pd.concat(
         [metrics_table, pd.DataFrame([["all", seen, nt.sum(), mp, mr, map50, map]], columns=columns)],
         ignore_index=True)
@@ -255,6 +261,7 @@ if __name__ == "__main__":
     parser.add_argument("--grounds", type=str, help="ground annotations coco format")    
     parser.add_argument("--predicts", type=str, help="predictions in coco format")    
     parser.add_argument("--images", type=str, default=None, help="data path")
+    parser.add_argument("--labels", type=str, default=None, help="path to file with labels")    
     parser.add_argument("--weights", type=str, default=None, help="path to model weights to be loaded into clearml")   
     parser.add_argument("--batch-size", type=int, default=8, help="size of each image batch")
     parser.add_argument("--nplots", type=int, default=5, help="number of plotted batches")    
@@ -271,11 +278,16 @@ if __name__ == "__main__":
 
     opt = parser.parse_args()
     print(opt)
+    
     if opt.clearml:
         clearml_init_task(opt)
+    
+    labels_list = [line.rstrip() for line in open(opt.labels)] if opt.labels else None
+
     main(imgs_path=opt.images, 
          grounds_annfile=opt.grounds, 
          detections_annfile=opt.predicts, 
+         labels=labels_list,
          batch_size=opt.batch_size, 
          imgsz=opt.plot_size,
          nplots=opt.nplots,
