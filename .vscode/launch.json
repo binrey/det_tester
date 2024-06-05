@@ -24,7 +24,6 @@
                 "--data-stats",
                 "--tide",
                 "--clearml",
-                "--exist-ok",
                 "--false-negatives"
                 //"--s3config", "/home/rybin-av/clearml.conf"
             ],

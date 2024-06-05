@@ -10,6 +10,7 @@ import pandas as pd
 from globox import AnnotationSet
 from PIL import Image
 from tqdm import tqdm
+import logging
 
 import utils.clearml_task
 from utils.clearml_task import clearml_init_task
@@ -17,13 +18,16 @@ from utils.general import (ImageLoader, box_iou, increment_path)
 from utils.metrics import ConfusionMatrix, ap_per_class
 from utils.object_selector import ObjectSelector
 from utils.plots import plot_data_stats, plot_images
-  
-# TODO  
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+
+# TODO
 import os
 os.environ["CURL_CA_BUNDLE"] = "/home/rybin-av/myCA.crt"
 os.environ["REQUESTS_CA_BUNDLE"] = "/home/rybin-av/myCA.crt"
 
-def run_test(imgs_path: str,
+def run_test(imgs_path: Optional[str],
              grounds_annfile: str,
              detections_annfile: str,
              batch_size: int = 4,
@@ -37,15 +41,36 @@ def run_test(imgs_path: str,
              task_name: str = "example",
              tags: List[str] = []
              ) -> None:
-    
+    """
+    Runs a test on the given images, ground truth annotations, and detections.
+
+    Args:
+        imgs_path: Path to the images.
+        grounds_annfile: Path to the ground truth annotations.
+        detections_annfile: Path to the detections.
+        batch_size: Size of each image batch.
+        nplots: Number of plotted batches.
+        imgsz: Size of plotted images.
+        log2clearml: Whether to use ClearML for logging.
+        add_data_stats: Whether to calculate and plot statistics of objects sizes.
+        add_tide: Whether to calculate and plot TIDE metric.
+        add_false_negatives: Whether to add false negatives examples.
+        project_name: Project name in ClearML.
+        task_name: Task name in ClearML.
+        tags: ClearML task tags.
+
+    Returns:
+        None
+    """
+
     if log2clearml:
         clearml_init_task(project_name=project_name, task_name=task_name, tags=tags)
-    
+
     save_images = False
     if imgs_path is not None:
         save_images = True
         imgs_path = Path(imgs_path)
-        
+
     if add_tide:
         from tidecv import TIDE, Data
         tide = TIDE()
@@ -53,22 +78,21 @@ def run_test(imgs_path: str,
         det_data = Data("detections")
 
     # Directories
-    save_dir = Path(increment_path(Path(opt.project) / "_".join([opt.name]+opt.tags), exist_ok=opt.exist_ok))  # increment run
-    save_dir.mkdir(parents=True, exist_ok=True)  # make dir
+    save_dir = Path(increment_path(Path(project_name) / "_".join([task_name]+tags), exist_ok=True))
+    save_dir.mkdir(parents=True, exist_ok=True)
 
-    # load ground truth dataset
+    # Load ground truth dataset
     annset_gt = load_dataset(grounds_annfile)
-    
+
     if add_data_stats:
         plot_data_stats(annset_gt, save_dir / "data_stats.png", log2clearml)
 
-    # load detections dataset
+    # Load detections dataset
     annset_pr = load_dataset(detections_annfile)
 
-    # check_dataset(data)  # check
     nc = len(annset_gt._id_to_label)
     lab2id = {v:k for k, v in annset_gt._id_to_label.items()}
-    iouv = np.linspace(0.5, 0.95, 10) # iou vector for mAP@0.5:0.95
+    iouv = np.linspace(0.5, 0.95, 10)
     niou = len(iouv)
 
     seen = 0
@@ -76,13 +100,25 @@ def run_test(imgs_path: str,
         boxes2plot = ObjectSelector(imgs_path)
     confusion_matrix = ConfusionMatrix(nc=nc, log2clearml=log2clearml)
     names = annset_gt._id_to_label
-    p, r, f1, mp, mr, map50, map= 0., 0., 0., 0., 0., 0., 0.
-    stats, ap, ap_class = [], [], []
-    imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot, maps4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], [], []
+    p, r, mp, mr, map50, map = 0., 0., 0., 0., 0., 0.
+    stats: List[Tuple[np.ndarray, np.ndarray, np.ndarray, List[int]]] = []
+    imgs4plot = np.zeros((batch_size, 3, imgsz, imgsz))
+    gt_labs4plot: List[np.ndarray] = []
+    pr_labs4plot: List[np.ndarray] = []
+    gt_bboxes4plot: List[np.ndarray] = []
+    pr_bboxes4plot: List[np.ndarray] = []
+    confs4plot: List[np.ndarray] = []
+    ids4plot: List[str] = []
+    maps4plot: List[str] = []
     sorted_ids = sorted(list(annset_gt.image_ids))
     for nimg, img_id in enumerate(tqdm(sorted_ids, "process detections")):
-        ann_gt = annset_gt[img_id]
+        try:
+            ann_gt = annset_gt[img_id]
+        except KeyError:
+            logging.warning(f"Image ID {img_id} not found in ground truth dataset.")
+            continue
         if img_id not in annset_pr._annotations.keys():
+            logging.warning(f"Image ID {img_id} not found in detections dataset.")
             continue
         ann_pr = annset_pr[img_id]
         bboxes_gt = ann_gt.boxes
@@ -102,7 +138,7 @@ def run_test(imgs_path: str,
             pred[i, :4], pred[i, 4], pred[i, 5] = bbox.ltrb, bbox.confidence, lab2id[bbox.label]
 
         nl = len(labels)
-        tcls = labels[:, 0].tolist() if nl else []  # target class
+        tcls = labels[:, 0].tolist() if nl else []
         seen += 1
 
         if len(pred) == 0:
@@ -116,17 +152,17 @@ def run_test(imgs_path: str,
         # Assign all predictions as incorrect
         correct = np.zeros((pred.shape[0], niou))
         if nl:
-            detected = []  # target indices
+            detected = []
             tcls_tensor = labels[:, 0]
 
-            # target boxes
+            # Target boxes
             tbox = labels[:, 1:5]
             confusion_matrix.process_batch(predn, np.concatenate([labels[:, 0:1], tbox], 1))
 
             # Per target class
             for cls in np.unique(tcls_tensor):
-                ti = np.array((cls == tcls_tensor).nonzero())[0]  # prediction indices
-                pi = np.array((cls == pred[:, 5]).nonzero())[0]  # target indices
+                ti = np.array((cls == tcls_tensor).nonzero())[0]
+                pi = np.array((cls == pred[:, 5]).nonzero())[0]
 
                 # Search for detections
                 if pi.shape[0]:
@@ -137,12 +173,12 @@ def run_test(imgs_path: str,
                     # Append detections
                     detected_set = set()
                     for j in (ious >= iouv[0]).nonzero()[0]:
-                        d = ti[i[j]]  # detected target
+                        d = ti[i[j]]
                         if d.item() not in detected_set:
                             detected_set.add(d.item())
                             detected.append(d)
-                            correct[pi[j]] = ious[j] > iouv  # iou_thres is 1xn
-                            if len(detected) == nl:  # all targets already located in image
+                            correct[pi[j]] = ious[j] > iouv
+                            if len(detected) == nl:
                                 break
                     if save_images:
                         for j in set(ti) - detected_set:
@@ -151,10 +187,10 @@ def run_test(imgs_path: str,
         # Append statistics (correct, conf, pcls, tcls)
         stats.append((correct, pred[:, 4], pred[:, 5], tcls))
 
-        stats4img = [np.concatenate(x, 0) for x in zip(*stats[-1:])]  # to numpy
+        stats4img = [np.concatenate(x, 0) for x in zip(*stats[-1:])]
         if len(stats4img) and stats4img[0].any():
             p, r, ap, f1, ap_class = ap_per_class(*stats4img, plot=False, save_dir=None, names=names, log2clearml=False)
-            ap = [ap[:, 0].mean(), ap[:, :].mean()]  # AP@0.5
+            ap = [ap[:, 0].mean(), ap[:, :].mean()]
         else:
             ap = [0, 0] if len(tcls) else [1, 1]
 
@@ -172,32 +208,32 @@ def run_test(imgs_path: str,
             confs4plot.append(pred[:, 4])
             imgs4plot[len(ids4plot)-1] = img
             if len(ids4plot) == batch_size:
-                f = save_dir / f"batch{nplot}_gtruth.jpg"  # labels
-                plot_images(imgs4plot, gt_bboxes4plot, gt_labs4plot, None, ids4plot, f, names, log2clearml=log2clearml)        
-                f = save_dir / f"batch{nplot}_pred.jpg"  # predictions
-                plot_images(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, maps4plot, f, names, log2clearml=log2clearml)        
+                f = save_dir / f"batch{nplot}_gtruth.jpg"
+                plot_images(imgs4plot, gt_bboxes4plot, gt_labs4plot, None, ids4plot, f, names, log2clearml=log2clearml)
+                f = save_dir / f"batch{nplot}_pred.jpg"
+                plot_images(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, maps4plot, f, names, log2clearml=log2clearml)
                 imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot, maps4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], [], []
-    
+
     # Plot false negatives
     if save_images and add_false_negatives:
         boxes2plot.plot_fn(save_dir / "false_negatives.png", batch_size=20)
 
     # Compute statistics
-    stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
+    stats = [np.concatenate(x, 0) for x in zip(*stats)]
     if len(stats) and stats[0].any():
         p, r, ap, f1, ap_class = ap_per_class(*stats, plot=True, save_dir=save_dir, names=names, log2clearml=log2clearml)
-        ap50, ap = ap[:, 0], ap.mean(1)  # AP@0.5, AP@0.5:0.95
+        ap50, ap = ap[:, 0], ap.mean(1)
         mp, mr, map50, map = p.mean(), r.mean(), ap50.mean(), ap.mean()
-        nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
+        nt = np.bincount(stats[3].astype(np.int64), minlength=nc)
     else:
         nt = np.zeros(1)
 
     # Print results
     columns = ["Class", "Images", "Labels", "P", "R", "mAP@.5%", "mAP@.5:.95%"]
     metrics_table = pd.DataFrame([], columns=columns)
-    pf = "%20s" + "%12i" * 2 + "%12.3g" * 4  # print format
-    print(("%20s" + "%12s" * 2 + "%12s" * 4) % tuple(columns))
-    print(pf % ("all", seen, nt.sum(), mp, mr, map50*100, map*100))
+    pf = "%20s" + "%12i" * 2 + "%12.3g" * 4
+    logging.info(("%20s" + "%12s" * 2 + "%12s" * 4) % tuple(columns))
+    logging.info(pf % ("all", seen, nt.sum(), mp, mr, map50*100, map*100))
     metrics_table = pd.concat(
         [metrics_table, pd.DataFrame([["all", seen, nt.sum(), mp, mr, map50, map]], columns=columns)],
         ignore_index=True)
@@ -205,15 +241,14 @@ def run_test(imgs_path: str,
     # Print results per class
     if nc < 50 and nc > 1 and len(stats):
         for i, c in enumerate(ap_class):
-            print(pf % (names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]))
+            logging.info(pf % (names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]))
             metrics_table = pd.concat(
                 [metrics_table, pd.DataFrame([[names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]]], columns=columns)],
                 ignore_index=True)
     if log2clearml:
         utils.clearml_task.clearml_logger.report_table("General metrics", "mAPs table", 0, metrics_table)
 
-    with open(save_dir / "metrics.csv", "w") as mf:
-        mf.write(metrics_table.to_string())
+    metrics_table.to_csv(save_dir / "metrics.csv", index=False)
 
     # TIDE metrics
     if add_tide:
@@ -231,43 +266,41 @@ def run_test(imgs_path: str,
             if log2clearml:
                 utils.clearml_task.clearml_logger.report_matplotlib_figure("General metrics", "TIDE", fig, report_interactive=False)
         except Exception as exp:
-            print(exp)
-            pass
+            logging.error(exp)
 
     # Plots
     confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))
 
     # Return results
-    print(f"Results saved to {save_dir}")
-
+    logging.info(f"Results saved to {save_dir}")
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(prog="test.py")
-    parser.add_argument("--grounds", type=str, help="ground annotations path")    
-    parser.add_argument("--predicts", type=str, help="predictions path")    
+    parser.add_argument("--grounds", type=str, help="ground annotations path")
+    parser.add_argument("--predicts", type=str, help="predictions path")
     parser.add_argument("--images", type=str, default=None, help="data path")
-    parser.add_argument("--weights", type=str, default=None, help="path to model weights to be loaded into clearml")   
+    parser.add_argument("--weights", type=str, default=None, help="path to model weights to be loaded into clearml")
     parser.add_argument("--batch-size", type=int, default=8, help="size of each image batch")
-    parser.add_argument("--nplots", type=int, default=5, help="number of plotted batches")    
+    parser.add_argument("--nplots", type=int, default=5, help="number of plotted batches")
     parser.add_argument("--plot-size", type=int, default=1024, help="size of plotted images")
     parser.add_argument("--project", default="Testing", help="project name in ClearML")
     parser.add_argument("--name", default="example", help="save to project/name")
     parser.add_argument("--tags", type=str, nargs='+', default=[], help="clearml task tags")
-    parser.add_argument("--data-stats", action="store_true", help="calc and plot statistics of objects sizes") 
-    parser.add_argument("--tide", action="store_true", help="calc and plot TIDE metric")  
-    parser.add_argument("--false-negatives", action="store_true", help="add false negatives examples")          
+    parser.add_argument("--data-stats", action="store_true", help="calc and plot statistics of objects sizes")
+    parser.add_argument("--tide", action="store_true", help="calc and plot TIDE metric")
+    parser.add_argument("--false-negatives", action="store_true", help="add false negatives examples")
     parser.add_argument("--clearml", action="store_true", help="use clearml logging")
 
     opt = parser.parse_args()
-    print(opt)
-    
+    logging.info(opt)
+
     run_test(
-        imgs_path=opt.images, 
-        grounds_annfile=opt.grounds, 
-        detections_annfile=opt.predicts, 
-        batch_size=opt.batch_size, 
+        imgs_path=opt.images,
+        grounds_annfile=opt.grounds,
+        detections_annfile=opt.predicts,
+        batch_size=opt.batch_size,
         imgsz=opt.plot_size,
         nplots=opt.nplots,
         add_data_stats = opt.data_stats,
@@ -278,4 +311,3 @@ if __name__ == "__main__":
         task_name=opt.name,
         tags=opt.tags
         )
-
