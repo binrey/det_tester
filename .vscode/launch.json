@@ -16,16 +16,16 @@
                 "--images", "/home/rybin-av/cv-data_processing/dataset_objects/images",
                 // "--weights", "smb://10.10.50.26/work_share/developers/rybin/models/ObjectDetection/yolov7-1280-cls17/weights/best.pt",
                 "--grounds", "/home/rybin-av/cv-data_processing/dataset_objects/markup_mini.json",
-                "--predicts", "/home/rybin-av/cv-data_processing/dataset_objects/predicts_mini.json",    
-                "--labels", "/home/rybin-av/cv-data_processing/dataset_objects/classes.json",            
+                "--predicts", "/home/rybin-av/cv-data_processing/dataset_objects/predicts_mini.json",             
                 "--batch-size", "4",
-                "--nplots", "5",
+                "--nplots", "4",
                 "--project", "Testing",
                 "--tags", "1280x1280", "objects_v1.0.0",
                 "--data-stats",
                 "--tide",
                 "--clearml",
                 "--exist-ok",
+                "--false-negatives"
                 //"--s3config", "/home/rybin-av/clearml.conf"
             ],
             "cwd": "${workspaceFolder}"
