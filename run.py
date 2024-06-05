@@ -1,6 +1,7 @@
 import json
 import shutil
 from pathlib import Path
+from typing import List, Optional, Tuple, Union
 from utils.dataloading import load_dataset
 
 import matplotlib.pyplot as plt
@@ -22,20 +23,20 @@ import os
 os.environ["CURL_CA_BUNDLE"] = "/home/rybin-av/myCA.crt"
 os.environ["REQUESTS_CA_BUNDLE"] = "/home/rybin-av/myCA.crt"
 
-def main(imgs_path:str,
-         grounds_annfile,
-         detections_annfile,
-         batch_size=4,
-         nplots=10,
-         imgsz=1024,
-         log2clearml=True,
-         add_data_stats=True,
-         add_tide=True,
-         add_false_negatives=True,
-         project_name="Testing",
-         task_name="example",
-         tags=[]
-         ):
+def run_test(imgs_path: str,
+             grounds_annfile: str,
+             detections_annfile: str,
+             batch_size: int = 4,
+             nplots: int = 10,
+             imgsz: int = 1024,
+             log2clearml: bool = True,
+             add_data_stats: bool = True,
+             add_tide: bool = True,
+             add_false_negatives: bool = True,
+             project_name: str = "Testing",
+             task_name: str = "example",
+             tags: List[str] = []
+             ) -> None:
     
     if log2clearml:
         clearml_init_task(project_name=project_name, task_name=task_name, tags=tags)
@@ -211,7 +212,7 @@ def main(imgs_path:str,
     if log2clearml:
         utils.clearml_task.clearml_logger.report_table("General metrics", "mAPs table", 0, metrics_table)
 
-    with open(save_dir / "metrics.txt", "w") as mf:
+    with open(save_dir / "metrics.csv", "w") as mf:
         mf.write(metrics_table.to_string())
 
     # TIDE metrics
@@ -254,27 +255,27 @@ if __name__ == "__main__":
     parser.add_argument("--project", default="Testing", help="project name in ClearML")
     parser.add_argument("--name", default="example", help="save to project/name")
     parser.add_argument("--tags", type=str, nargs='+', default=[], help="clearml task tags")
-    parser.add_argument("--s3config", type=str, default="configs/config.yaml", help="Path to a config file.")
     parser.add_argument("--data-stats", action="store_true", help="calc and plot statistics of objects sizes") 
     parser.add_argument("--tide", action="store_true", help="calc and plot TIDE metric")  
     parser.add_argument("--false-negatives", action="store_true", help="add false negatives examples")          
     parser.add_argument("--clearml", action="store_true", help="use clearml logging")
-    parser.add_argument("--exist-ok", action="store_true", help="existing project/name ok, do not increment")
 
     opt = parser.parse_args()
     print(opt)
     
-    main(imgs_path=opt.images, 
-         grounds_annfile=opt.grounds, 
-         detections_annfile=opt.predicts, 
-         batch_size=opt.batch_size, 
-         imgsz=opt.plot_size,
-         nplots=opt.nplots,
-         add_data_stats = opt.data_stats,
-         add_tide = opt.tide,
-         add_false_negatives=opt.false_negatives,
-         log2clearml=opt.clearml,
-         project_name=opt.project,
-         task_name=opt.name,
-         tags=opt.tags)
+    run_test(
+        imgs_path=opt.images, 
+        grounds_annfile=opt.grounds, 
+        detections_annfile=opt.predicts, 
+        batch_size=opt.batch_size, 
+        imgsz=opt.plot_size,
+        nplots=opt.nplots,
+        add_data_stats = opt.data_stats,
+        add_tide = opt.tide,
+        add_false_negatives=opt.false_negatives,
+        log2clearml=opt.clearml,
+        project_name=opt.project,
+        task_name=opt.name,
+        tags=opt.tags
+        )
 
