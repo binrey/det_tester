@@ -48,9 +48,9 @@ def run_test(imgs_path: Optional[str],
         imgs_path: Path to the images.
         grounds_annfile: Path to the ground truth annotations.
         detections_annfile: Path to the detections.
-        batch_size: Size of each image batch.
-        nplots: Number of plotted batches.
-        imgsz: Size of plotted images.
+        batch_size: Amount of images to plot in collage.
+        nplots: Amount of collages.
+        imgsz: Size of collage.
         log2clearml: Whether to use ClearML for logging.
         add_data_stats: Whether to calculate and plot statistics of objects sizes.
         add_tide: Whether to calculate and plot TIDE metric.
