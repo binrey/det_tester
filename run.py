@@ -27,20 +27,22 @@ import os
 os.environ["CURL_CA_BUNDLE"] = "/home/rybin-av/myCA.crt"
 os.environ["REQUESTS_CA_BUNDLE"] = "/home/rybin-av/myCA.crt"
 
-def run_test(imgs_path: Optional[str],
+def run_test(imgs_path: str,
              grounds_annfile: str,
              detections_annfile: str,
              batch_size: int = 4,
              nplots: int = 10,
              imgsz: int = 1024,
+             save_images: bool = True,
              log2clearml: bool = True,
              add_data_stats: bool = True,
              add_tide: bool = True,
              add_false_negatives: bool = True,
              project_name: str = "Testing",
              task_name: str = "example",
+             task_comment: Optional[str] = None,
              tags: List[str] = []
-             ) -> None:
+             ) -> str:
     """
     Runs a test on the given images, ground truth annotations, and detections.
 
@@ -51,25 +53,26 @@ def run_test(imgs_path: Optional[str],
         batch_size: Amount of images to plot in collage.
         nplots: Amount of collages.
         imgsz: Size of collage.
+        save_images: Whether to save images.
         log2clearml: Whether to use ClearML for logging.
         add_data_stats: Whether to calculate and plot statistics of objects sizes.
         add_tide: Whether to calculate and plot TIDE metric.
         add_false_negatives: Whether to add false negatives examples.
         project_name: Project name in ClearML.
         task_name: Task name in ClearML.
+        task_comment: Task comment.
         tags: ClearML task tags.
 
     Returns:
-        None
+        str: Path to clearml log.
     """
 
-    if log2clearml:
-        clearml_init_task(project_name=project_name, task_name=task_name, tags=tags)
+    path2log = clearml_init_task(project_name=project_name, task_name=task_name, tags=tags, comment=task_comment) if log2clearml else ""
 
-    save_images = False
     if imgs_path is not None:
-        save_images = True
         imgs_path = Path(imgs_path)
+    else:
+        save_images = False
 
     if add_tide:
         from tidecv import TIDE, Data
@@ -96,7 +99,7 @@ def run_test(imgs_path: Optional[str],
     niou = len(iouv)
 
     seen = 0
-    if save_images:
+    if add_false_negatives:
         boxes2plot = ObjectSelector(imgs_path)
     confusion_matrix = ConfusionMatrix(nc=nc, log2clearml=log2clearml)
     names = annset_gt._id_to_label
@@ -180,7 +183,7 @@ def run_test(imgs_path: Optional[str],
                             correct[pi[j]] = ious[j] > iouv
                             if len(detected) == nl:
                                 break
-                    if save_images:
+                    if add_false_negatives:
                         for j in set(ti) - detected_set:
                             boxes2plot.add_fn(img_id, bboxes_gt[j], image_size=ann_gt.image_size)
 
@@ -196,7 +199,7 @@ def run_test(imgs_path: Optional[str],
 
         # Plot images
         nplot = int((nimg+1)/batch_size)
-        if save_images and nplot <= nplots:
+        if nplot <= nplots:
             ids4plot.append(img_id)
             maps4plot.append(f"{img_id}")
             img_loader = ImageLoader(imgsz)
@@ -209,14 +212,14 @@ def run_test(imgs_path: Optional[str],
             imgs4plot[len(ids4plot)-1] = img
             if len(ids4plot) == batch_size:
                 f = save_dir / f"batch{nplot}_gtruth.jpg"
-                plot_images(imgs4plot, gt_bboxes4plot, gt_labs4plot, None, ids4plot, f, names, log2clearml=log2clearml)
+                plot_images(imgs4plot, gt_bboxes4plot, gt_labs4plot, None, ids4plot, f, names, log2clearml=log2clearml, save_images=save_images)
                 f = save_dir / f"batch{nplot}_pred.jpg"
-                plot_images(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, maps4plot, f, names, log2clearml=log2clearml)
+                plot_images(imgs4plot, pr_bboxes4plot, pr_labs4plot, confs4plot, maps4plot, f, names, log2clearml=log2clearml, save_images=save_images)
                 imgs4plot, gt_labs4plot, pr_labs4plot, gt_bboxes4plot, pr_bboxes4plot, confs4plot, ids4plot, maps4plot = np.zeros((batch_size, 3, imgsz, imgsz)), [], [], [], [], [], [], []
 
     # Plot false negatives
-    if save_images and add_false_negatives:
-        boxes2plot.plot_fn(save_dir / "false_negatives.png", batch_size=20)
+    if add_false_negatives:
+        boxes2plot.draw(save_dir / "false_negatives.png", save_images=save_images, log2clearml=log2clearml)
 
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in zip(*stats)]
@@ -273,6 +276,7 @@ def run_test(imgs_path: Optional[str],
 
     # Return results
     logging.info(f"Results saved to {save_dir}")
+    return path2log
 
 if __name__ == "__main__":
     import argparse
@@ -283,11 +287,13 @@ if __name__ == "__main__":
     parser.add_argument("--images", type=str, default=None, help="data path")
     parser.add_argument("--weights", type=str, default=None, help="path to model weights to be loaded into clearml")
     parser.add_argument("--batch-size", type=int, default=8, help="size of each image batch")
+    parser.add_argument("--save_images", type=bool, default=False, help="save images")
     parser.add_argument("--nplots", type=int, default=5, help="number of plotted batches")
     parser.add_argument("--plot-size", type=int, default=1024, help="size of plotted images")
     parser.add_argument("--project", default="Testing", help="project name in ClearML")
     parser.add_argument("--name", default="example", help="save to project/name")
     parser.add_argument("--tags", type=str, nargs='+', default=[], help="clearml task tags")
+    parser.add_argument("--comment", type=str, default=None, help="clearml task comment")    
     parser.add_argument("--data-stats", action="store_true", help="calc and plot statistics of objects sizes")
     parser.add_argument("--tide", action="store_true", help="calc and plot TIDE metric")
     parser.add_argument("--false-negatives", action="store_true", help="add false negatives examples")
@@ -296,12 +302,13 @@ if __name__ == "__main__":
     opt = parser.parse_args()
     logging.info(opt)
 
-    run_test(
+    path2log = run_test(
         imgs_path=opt.images,
         grounds_annfile=opt.grounds,
         detections_annfile=opt.predicts,
         batch_size=opt.batch_size,
         imgsz=opt.plot_size,
+        save_images=opt.save_images,
         nplots=opt.nplots,
         add_data_stats = opt.data_stats,
         add_tide = opt.tide,
@@ -309,5 +316,8 @@ if __name__ == "__main__":
         log2clearml=opt.clearml,
         project_name=opt.project,
         task_name=opt.name,
+        task_comment=opt.comment,
         tags=opt.tags
         )
+    
+    print(path2log)

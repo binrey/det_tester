@@ -4,6 +4,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 from random import shuffle
 from tqdm import tqdm
+import utils.clearml_task
+from PIL import Image
 
 
 class ObjectSelector:
@@ -33,10 +35,8 @@ class ObjectSelector:
                 return scale/10, textSize[0][0], textSize[0][1]
         return 1
 
-    def plot_fn(self, path2save, batch_size=5, img_size=(120, 120)):
-        self.draw(self.fn, path2save, batch_size, img_size)
-
-    def draw(self, examples, path2save, ncols=5, img_size=(120, 120), pad=10):
+    def draw(self, path2save, ncols=20, img_size=(120, 120), pad=10, log2clearml=False, save_images=True):
+        examples = self.fn
         irow = 0
         for lab in tqdm(examples.keys(), "process false negatives"):
             if len(examples[lab]) == 0:
@@ -63,20 +63,24 @@ class ObjectSelector:
                     if c == 4:
                         ts, tw, th = self.get_optimal_font_scale(lab, img_size[1]*0.3)
                         tw, th = tw+4, th+4
-                        # cv2.rectangle(row, (0, 0), (tw+3, th+3), (255, 255, 255), -1)
                         white_rect = np.ones((th, tw, 3), dtype=np.uint8) * 255
                         row[:th, :tw] = cv2.addWeighted(row[:th, :tw], 0.5, white_rect, 0.5, 1.0)
                         row = cv2.putText(row, f"{lab}", (0, th), cv2.FONT_HERSHEY_DUPLEX, ts, (0, 0, 0), 2)
-                        # row = cv2.putText(row, f"{lab}:{cc[lab]}", (0, th), cv2.FONT_HERSHEY_DUPLEX, ts, (0, 0, 0))
             if irow == 0:
                 wall = row
             else:
                 wall = np.vstack([wall, row])
             irow += 1
 
-
         fig, ax = plt.subplots(figsize=(ncols*2, 2*irow))
         plt.imshow(wall)
         plt.axis("off")
         plt.tight_layout()
         plt.savefig(str(path2save))
+        if log2clearml:
+            utils.clearml_task.clearml_logger.report_image(
+                "False negatives",
+                path2save.stem,
+                iteration=0,
+                image=Image.open(str(path2save)).convert("RGB")
+                )

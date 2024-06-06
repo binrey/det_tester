@@ -45,17 +45,6 @@ def hist2d(x, y, n=100):
     return np.log(hist[xidx, yidx])
 
 
-def butter_lowpass_filtfilt(data, cutoff=1500, fs=50000, order=5):
-    # https://stackoverflow.com/questions/28536191/how-to-filter-smooth-with-scipy-numpy
-    def butter_lowpass(cutoff, fs, order):
-        nyq = 0.5 * fs
-        normal_cutoff = cutoff / nyq
-        return butter(order, normal_cutoff, btype='low', analog=False)
-
-    b, a = butter_lowpass(cutoff, fs, order=order)
-    return filtfilt(b, a, data)  # forward-backward filter
-
-
 def plot_one_box(x, img, color=None, label=None, line_thickness=3):
     # Plots one bounding box on image img
     tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
@@ -70,50 +59,8 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=3):
         cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
 
 
-def plot_one_box_PIL(box, img, color=None, label=None, line_thickness=None):
-    img = Image.fromarray(img)
-    draw = ImageDraw.Draw(img)
-    line_thickness = line_thickness or max(int(min(img.size) / 200), 2)
-    draw.rectangle(box, width=line_thickness, outline=tuple(color))  # plot
-    if label:
-        fontsize = max(round(max(img.size) / 40), 12)
-        font = ImageFont.truetype("Arial.ttf", fontsize)
-        txt_width, txt_height = font.getsize(label)
-        draw.rectangle([box[0], box[1] - txt_height + 4, box[0] + txt_width, box[1]], fill=tuple(color))
-        draw.text((box[0], box[1] - txt_height + 1), label, fill=(255, 255, 255), font=font)
-    return np.asarray(img)
 
-
-def plot_wh_methods():  # from utils.plots import *; plot_wh_methods()
-    # Compares the two methods for width-height anchor multiplication
-    # https://github.com/ultralytics/yolov3/issues/168
-    x = np.arange(-4.0, 4.0, .1)
-    ya = np.exp(x)
-    yb = torch.sigmoid(torch.from_numpy(x)).numpy() * 2
-
-    fig = plt.figure(figsize=(6, 3), tight_layout=True)
-    plt.plot(x, ya, '.-', label='YOLOv3')
-    plt.plot(x, yb ** 2, '.-', label='YOLOR ^2')
-    plt.plot(x, yb ** 1.6, '.-', label='YOLOR ^1.6')
-    plt.xlim(left=-4, right=4)
-    plt.ylim(bottom=0, top=6)
-    plt.xlabel('input')
-    plt.ylabel('output')
-    plt.grid()
-    plt.legend()
-    fig.savefig('comparison.png', dpi=200)
-
-
-def output_to_target(output):
-    # Convert model output to target format [batch_id, class_id, x, y, w, h, conf]
-    targets = []
-    for i, o in enumerate(output):
-        for *box, conf, cls in o.cpu().numpy():
-            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf])
-    return np.array(targets)
-
-
-def plot_images(images, bboxes, labs, confs, paths=None, fname='images.jpg', names=None, max_size=5000, max_subplots=16, log2clearml=False):
+def plot_images(images, bboxes, labs, confs, paths=None, fname='images.jpg', names=None, max_size=5000, max_subplots=16, log2clearml=False, save_images=True):
     # Plot image grid with labels
     tl = 3  # line thickness
     tf = max(tl - 1, 1)  # font thickness
@@ -149,12 +96,6 @@ def plot_images(images, bboxes, labs, confs, paths=None, fname='images.jpg', nam
             else:
                 iconf = confs[i]
                 labels = False
-            
-            # boxes = xywh2xyxy(image_targets[:, 2:6]).T
-            # boxes = image_targets[:, 2:6].T
-            # ilabs = image_targets[:, 1].astype('int')
-            # labels = image_targets.shape[1] == 6  # labels if no conf column
-            # conf = None if labels else image_targets[:, 6]  # check for confidence presence (label vs pred)
 
             if ibboxes.shape[1]:
                 if ibboxes.max() <= 1.01:  # if normalized with tolerance 0.01
@@ -189,12 +130,13 @@ def plot_images(images, bboxes, labs, confs, paths=None, fname='images.jpg', nam
         pil_image = Image.fromarray(mosaic)
         if log2clearml:
             utils.clearml_task.clearml_logger.report_image(
-                        "GTvsPredictions",
+                        "GT vs Predictions",
                         fname.stem,
                         iteration=0,
                         image=pil_image
                     )
-        pil_image.save(fname)  # PIL save
+        if save_images:
+            pil_image.save(fname)  # PIL save
 
     return mosaic
 
@@ -214,68 +156,6 @@ def plot_lr_scheduler(optimizer, scheduler, epochs=300, save_dir=''):
     plt.ylim(0)
     plt.savefig(Path(save_dir) / 'LR.png', dpi=200)
     plt.close()
-
-
-def plot_test_txt():  # from utils.plots import *; plot_test()
-    # Plot test.txt histograms
-    x = np.loadtxt('test.txt', dtype=np.float32)
-    box = xyxy2xywh(x[:, :4])
-    cx, cy = box[:, 0], box[:, 1]
-
-    fig, ax = plt.subplots(1, 1, figsize=(6, 6), tight_layout=True)
-    ax.hist2d(cx, cy, bins=600, cmax=10, cmin=0)
-    ax.set_aspect('equal')
-    plt.savefig('hist2d.png', dpi=300)
-
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6), tight_layout=True)
-    ax[0].hist(cx, bins=600)
-    ax[1].hist(cy, bins=600)
-    plt.savefig('hist1d.png', dpi=200)
-
-
-def plot_targets_txt():  # from utils.plots import *; plot_targets_txt()
-    # Plot targets.txt histograms
-    x = np.loadtxt('targets.txt', dtype=np.float32).T
-    s = ['x targets', 'y targets', 'width targets', 'height targets']
-    fig, ax = plt.subplots(2, 2, figsize=(8, 8), tight_layout=True)
-    ax = ax.ravel()
-    for i in range(4):
-        ax[i].hist(x[i], bins=100, label='%.3g +/- %.3g' % (x[i].mean(), x[i].std()))
-        ax[i].legend()
-        ax[i].set_title(s[i])
-    plt.savefig('targets.jpg', dpi=200)
-
-
-def plot_study_txt(path='', x=None):  # from utils.plots import *; plot_study_txt()
-    # Plot study.txt generated by test.py
-    fig, ax = plt.subplots(2, 4, figsize=(10, 6), tight_layout=True)
-    # ax = ax.ravel()
-
-    fig2, ax2 = plt.subplots(1, 1, figsize=(8, 4), tight_layout=True)
-    # for f in [Path(path) / f'study_coco_{x}.txt' for x in ['yolor-p6', 'yolor-w6', 'yolor-e6', 'yolor-d6']]:
-    for f in sorted(Path(path).glob('study*.txt')):
-        y = np.loadtxt(f, dtype=np.float32, usecols=[0, 1, 2, 3, 7, 8, 9], ndmin=2).T
-        x = np.arange(y.shape[1]) if x is None else np.array(x)
-        s = ['P', 'R', 'mAP@.5', 'mAP@.5:.95', 't_inference (ms/img)', 't_NMS (ms/img)', 't_total (ms/img)']
-        # for i in range(7):
-        #     ax[i].plot(x, y[i], '.-', linewidth=2, markersize=8)
-        #     ax[i].set_title(s[i])
-
-        j = y[3].argmax() + 1
-        ax2.plot(y[6, 1:j], y[3, 1:j] * 1E2, '.-', linewidth=2, markersize=8,
-                 label=f.stem.replace('study_coco_', '').replace('yolo', 'YOLO'))
-
-    ax2.plot(1E3 / np.array([209, 140, 97, 58, 35, 18]), [34.6, 40.5, 43.0, 47.5, 49.7, 51.5],
-             'k.-', linewidth=2, markersize=8, alpha=.25, label='EfficientDet')
-
-    ax2.grid(alpha=0.2)
-    ax2.set_yticks(np.arange(20, 60, 5))
-    ax2.set_xlim(0, 57)
-    ax2.set_ylim(30, 55)
-    ax2.set_xlabel('GPU Speed (ms/img)')
-    ax2.set_ylabel('COCO AP val')
-    ax2.legend(loc='lower right')
-    plt.savefig(str(Path(path).name) + '.png', dpi=300)
 
 
 def plot_labels(labels, names=(), save_dir=Path(''), loggers=None):
@@ -381,121 +261,6 @@ def profile_idetection(start=0, stop=0, labels=(), save_dir=''):
 
     ax[1].legend()
     plt.savefig(Path(save_dir) / 'idetection_profile.png', dpi=200)
-
-
-def plot_results_overlay(start=0, stop=0):  # from utils.plots import *; plot_results_overlay()
-    # Plot training 'results*.txt', overlaying train and val losses
-    s = ['train', 'train', 'train', 'Precision', 'mAP@0.5', 'val', 'val', 'val', 'Recall', 'mAP@0.5:0.95']  # legends
-    t = ['Box', 'Objectness', 'Classification', 'P-R', 'mAP-F1']  # titles
-    for f in sorted(glob.glob('results*.txt') + glob.glob('../../Downloads/results*.txt')):
-        results = np.loadtxt(f, usecols=[2, 3, 4, 8, 9, 12, 13, 14, 10, 11], ndmin=2).T
-        n = results.shape[1]  # number of rows
-        x = range(start, min(stop, n) if stop else n)
-        fig, ax = plt.subplots(1, 5, figsize=(14, 3.5), tight_layout=True)
-        ax = ax.ravel()
-        for i in range(5):
-            for j in [i, i + 5]:
-                y = results[j, x]
-                ax[i].plot(x, y, marker='.', label=s[j])
-                # y_smooth = butter_lowpass_filtfilt(y)
-                # ax[i].plot(x, np.gradient(y_smooth), marker='.', label=s[j])
-
-            ax[i].set_title(t[i])
-            ax[i].legend()
-            ax[i].set_ylabel(f) if i == 0 else None  # add filename
-        fig.savefig(f.replace('.txt', '.png'), dpi=200)
-
-
-def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir=''):
-    # Plot training 'results*.txt'. from utils.plots import *; plot_results(save_dir='runs/train/exp')
-    fig, ax = plt.subplots(2, 5, figsize=(12, 6), tight_layout=True)
-    ax = ax.ravel()
-    s = ['Box', 'Objectness', 'Classification', 'Precision', 'Recall',
-         'val Box', 'val Objectness', 'val Classification', 'mAP@0.5', 'mAP@0.5:0.95']
-    if bucket:
-        # files = ['https://storage.googleapis.com/%s/results%g.txt' % (bucket, x) for x in id]
-        files = ['results%g.txt' % x for x in id]
-        c = ('gsutil cp ' + '%s ' * len(files) + '.') % tuple('gs://%s/results%g.txt' % (bucket, x) for x in id)
-        os.system(c)
-    else:
-        files = list(Path(save_dir).glob('results*.txt'))
-    assert len(files), 'No results.txt files found in %s, nothing to plot.' % os.path.abspath(save_dir)
-    for fi, f in enumerate(files):
-        try:
-            results = np.loadtxt(f, usecols=[2, 3, 4, 8, 9, 12, 13, 14, 10, 11], ndmin=2).T
-            n = results.shape[1]  # number of rows
-            x = range(start, min(stop, n) if stop else n)
-            for i in range(10):
-                y = results[i, x]
-                if i in [0, 1, 2, 5, 6, 7]:
-                    y[y == 0] = np.nan  # don't show zero loss values
-                    # y /= y[0]  # normalize
-                label = labels[fi] if len(labels) else f.stem
-                ax[i].plot(x, y, marker='.', label=label, linewidth=2, markersize=8)
-                ax[i].set_title(s[i])
-                # if i in [5, 6, 7]:  # share train and val loss y axes
-                #     ax[i].get_shared_y_axes().join(ax[i], ax[i - 5])
-        except Exception as e:
-            print('Warning: Plotting error for %s; %s' % (f, e))
-
-    ax[1].legend()
-    fig.savefig(Path(save_dir) / 'results.png', dpi=200)
-    
-    
-def output_to_keypoint(output):
-    # Convert model output to target format [batch_id, class_id, x, y, w, h, conf]
-    targets = []
-    for i, o in enumerate(output):
-        kpts = o[:,6:]
-        o = o[:,:6]
-        for index, (*box, conf, cls) in enumerate(o.detach().cpu().numpy()):
-            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf, *list(kpts.detach().cpu().numpy()[index])])
-    return np.array(targets)
-
-
-def plot_skeleton_kpts(im, kpts, steps, orig_shape=None):
-    #Plot the skeleton and keypointsfor coco datatset
-    palette = np.array([[255, 128, 0], [255, 153, 51], [255, 178, 102],
-                        [230, 230, 0], [255, 153, 255], [153, 204, 255],
-                        [255, 102, 255], [255, 51, 255], [102, 178, 255],
-                        [51, 153, 255], [255, 153, 153], [255, 102, 102],
-                        [255, 51, 51], [153, 255, 153], [102, 255, 102],
-                        [51, 255, 51], [0, 255, 0], [0, 0, 255], [255, 0, 0],
-                        [255, 255, 255]])
-
-    skeleton = [[16, 14], [14, 12], [17, 15], [15, 13], [12, 13], [6, 12],
-                [7, 13], [6, 7], [6, 8], [7, 9], [8, 10], [9, 11], [2, 3],
-                [1, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7]]
-
-    pose_limb_color = palette[[9, 9, 9, 9, 7, 7, 7, 0, 0, 0, 0, 0, 16, 16, 16, 16, 16, 16, 16]]
-    pose_kpt_color = palette[[16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 9, 9, 9, 9, 9, 9]]
-    radius = 5
-    num_kpts = len(kpts) // steps
-
-    for kid in range(num_kpts):
-        r, g, b = pose_kpt_color[kid]
-        x_coord, y_coord = kpts[steps * kid], kpts[steps * kid + 1]
-        if not (x_coord % 640 == 0 or y_coord % 640 == 0):
-            if steps == 3:
-                conf = kpts[steps * kid + 2]
-                if conf < 0.5:
-                    continue
-            cv2.circle(im, (int(x_coord), int(y_coord)), radius, (int(r), int(g), int(b)), -1)
-
-    for sk_id, sk in enumerate(skeleton):
-        r, g, b = pose_limb_color[sk_id]
-        pos1 = (int(kpts[(sk[0]-1)*steps]), int(kpts[(sk[0]-1)*steps+1]))
-        pos2 = (int(kpts[(sk[1]-1)*steps]), int(kpts[(sk[1]-1)*steps+1]))
-        if steps == 3:
-            conf1 = kpts[(sk[0]-1)*steps+2]
-            conf2 = kpts[(sk[1]-1)*steps+2]
-            if conf1<0.5 or conf2<0.5:
-                continue
-        if pos1[0]%640 == 0 or pos1[1]%640==0 or pos1[0]<0 or pos1[1]<0:
-            continue
-        if pos2[0] % 640 == 0 or pos2[1] % 640 == 0 or pos2[0]<0 or pos2[1]<0:
-            continue
-        cv2.line(im, pos1, pos2, (int(r), int(g), int(b)), thickness=2)
 
 
 def plot_data_stats(annset:AnnotationSet, fname="data_stats.png", log2clearml=False):
